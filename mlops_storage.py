@@ -10,6 +10,22 @@ import pandas as pd
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+
+def create_versioned_storage(base_dir: str = "feature_store") -> Path:
+    """
+    Create a timestamped directory for a given run.
+    All successfully validated data for a given run must be saved inside this folder.
+
+    Returns:
+        Path to the created directory: {base_dir}/v_{YYYYMMDD_HHMMSS}/
+    """
+    timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+    versioned_dir = Path(base_dir) / f"v_{timestamp_str}"
+    versioned_dir.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Created versioned storage at {versioned_dir}")
+    return versioned_dir
+
+
 def save_feature_store(tabular_dfs: Dict[str, pd.DataFrame], geo_meta: Union[Dict, Any], scenario_name: str) -> str:
     """
     Saves tabular and geospatial artifacts to a structured feature store.

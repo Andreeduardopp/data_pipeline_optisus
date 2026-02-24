@@ -1,4 +1,4 @@
-from datetime import date, time, timedelta
+from datetime import date, time, timedelta, datetime
 from typing import Tuple, Optional
 from pydantic import BaseModel, Field, FilePath
 
@@ -28,6 +28,10 @@ class ElectricFleetCharacteristics(BaseModel):
 
 # --- Operations and Circulation ---
 class OperationsAndCirculation(BaseModel):
+    line_id: str = Field(..., description="Primary key linking to TransportedPassengers")
+    stop_id: str = Field(..., description="Primary key linking to the spatial node")
+    stop_sequence: int = Field(..., ge=1, description="Order of the stop on the route (Builds the graph edges)")
+    stops_coordinates: Tuple[float, float] = Field(..., description="Geographic location (Lat, Lon)")
     service_start_time: time = Field(..., description="Daily operating start time per line")
     service_end_time: time = Field(..., description="Daily operating end time per line")
     average_trip_duration: timedelta = Field(..., description="Average round trip time per line (min)")
@@ -47,11 +51,14 @@ class OperationsAndCirculation(BaseModel):
 
 # --- Transported Passengers ---
 class TransportedPassengers(BaseModel):
-    number_of_validations: int = Field(..., ge=0, description="Total validations per line/stop")
+    timestamp: datetime = Field(..., description="Exact date and time of the validation period")
+    line_id: str = Field(..., description="Identifier for the route (Mandatory for Mode B)")
+    stop_id: Optional[str] = Field(None, description="Identifier for the stop (Mandatory for Mode B)")
+    number_of_validations: int = Field(..., ge=0, description="Total validations")
     number_of_users: int = Field(..., ge=0, description="Distinct passengers per line")
     average_data_by_period: int = Field(..., ge=0, description="Indicators per hour/day/month (2022–2024)")
     passenger_km_index: float = Field(..., ge=0.0, description="Passengers per km traveled (IPK)")
-    fare_structure: float = Field(..., ge=0.0, description="Single ticket, monthly pass, student rates, etc. (Currency)")
+    fare_structure: str = Field(..., description="Fare structure (Categorical: single ticket, monthly pass, student rates, etc.)")
 
 # --- Charging Infrastructure ---
 class ChargingInfrastructure(BaseModel):
