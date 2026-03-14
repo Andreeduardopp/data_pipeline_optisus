@@ -4,3 +4,5 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.geojson
+data_lake_outputs/

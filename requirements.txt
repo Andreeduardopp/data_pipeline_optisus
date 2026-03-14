@@ -3,3 +3,4 @@ pandas
 pyarrow
 openpyxl
 geopandas
+streamlit

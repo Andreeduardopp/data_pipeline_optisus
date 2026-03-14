@@ -1,4 +1,0 @@
-Owner / Operator,Vehicle Type,Manufacturer / Model,Vehicle ID,Emissions Standard,Total Capacity,Seated Capacity,Average Age,Avg Consumption/Vehicle,Energy Cons. per Pax-km,Average CO2 Emissions,Operational Status
-Operator A,Electric,BusModel X,V001,Euro VI,80,40,5,1.2,0.05,0,1
-Operator B,Diesel,BusModel Y,V002,Euro V,100,50,8,30.5,0.1,500,No
-Operator C,Electric,BusModel Z,V003,Euro VI,invalid,40,2,1.1,0.04,0,Yes

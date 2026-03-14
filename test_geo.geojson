@@ -1,0 +1,38 @@
+{
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "stop_id": "S001",
+          "stop_name": "Central Station"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [-47.9292, -15.7801]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "stop_id": "S002",
+          "stop_name": "North Terminal"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [-47.9200, -15.7750]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "stop_id": "S003",
+          "stop_name": "South Plaza"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [-47.9350, -15.7850]
+        }
+      }
+    ]
+  }

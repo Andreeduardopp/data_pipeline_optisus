@@ -1,7 +1,7 @@
 import json
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import geopandas as gpd
 from pydantic import ValidationError
@@ -81,6 +81,100 @@ def ingest_spatial_data(
     logger.info(f"Saved GeoParquet to {out_path}")
 
     return gdf
+
+
+def read_spatial_for_preview(
+    file_path: str,
+) -> Tuple[Optional[gpd.GeoDataFrame], Optional[str]]:
+    """
+    Read a spatial file and return the raw GeoDataFrame for column preview.
+    Returns (gdf, None) on success, (None, error_message) on failure.
+    """
+    path = Path(file_path)
+    suffix = path.suffix.lower()
+    if suffix not in (".shp", ".geojson"):
+        return None, f"Unsupported spatial file extension: {suffix}. Use .shp or .geojson"
+    try:
+        gdf = gpd.read_file(file_path)
+        return gdf, None
+    except FileNotFoundError:
+        return None, f"File not found: {file_path}"
+    except Exception as e:
+        return None, str(e)
+
+
+def validate_spatial_data(
+    file_path: str,
+    required_columns: List[str],
+) -> Dict:
+    """
+    Validate spatial data without saving. Returns a result dict with:
+    - 'gdf': cleaned GeoDataFrame or None
+    - 'error': error message string or None
+    - 'total_rows': total features read
+    - 'valid_rows': features remaining after geometry validation
+    - 'invalid_rows': features dropped
+    - 'missing_columns': list of missing required columns (empty if all present)
+    """
+    path = Path(file_path)
+    suffix = path.suffix.lower()
+    if suffix not in (".shp", ".geojson"):
+        return {
+            "gdf": None,
+            "error": f"Unsupported spatial file extension: {suffix}. Use .shp or .geojson",
+            "total_rows": 0, "valid_rows": 0, "invalid_rows": 0,
+            "missing_columns": [],
+        }
+
+    try:
+        gdf = gpd.read_file(file_path)
+    except FileNotFoundError:
+        return {
+            "gdf": None, "error": f"File not found: {file_path}",
+            "total_rows": 0, "valid_rows": 0, "invalid_rows": 0,
+            "missing_columns": [],
+        }
+    except Exception as e:
+        return {
+            "gdf": None, "error": str(e),
+            "total_rows": 0, "valid_rows": 0, "invalid_rows": 0,
+            "missing_columns": [],
+        }
+
+    total = len(gdf)
+
+    missing = [c for c in required_columns if c not in gdf.columns]
+    if missing:
+        return {
+            "gdf": None,
+            "error": f"Missing required columns: {missing}. Available: {list(gdf.columns)}",
+            "total_rows": total, "valid_rows": 0, "invalid_rows": total,
+            "missing_columns": missing,
+        }
+
+    geom_col = gdf.geometry.name
+    invalid_mask = gdf[geom_col].isna() | gdf[geom_col].is_empty | ~gdf[geom_col].is_valid
+    n_invalid = int(invalid_mask.sum())
+    if n_invalid:
+        gdf = gdf[~invalid_mask].copy()
+        logger.warning(f"Dropped {n_invalid} row(s) with null, empty, or invalid geometry.")
+
+    if gdf.empty:
+        return {
+            "gdf": None,
+            "error": "No valid geometries remaining after validation.",
+            "total_rows": total, "valid_rows": 0, "invalid_rows": total,
+            "missing_columns": [],
+        }
+
+    return {
+        "gdf": gdf,
+        "error": None,
+        "total_rows": total,
+        "valid_rows": len(gdf),
+        "invalid_rows": n_invalid,
+        "missing_columns": [],
+    }
 
 
 def ingest_geo_metadata(json_path: str) -> Optional[GeographicData]:
