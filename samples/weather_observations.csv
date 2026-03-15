@@ -1,0 +1,6 @@
+timestamp,temperature_celsius,precipitation_mm,wind_speed_kmh,weather_condition
+2024-01-15 06:00:00,22.3,0.0,8.5,clear
+2024-01-15 07:00:00,24.1,0.0,10.2,clear
+2024-01-15 08:00:00,26.5,0.0,12.0,partly_cloudy
+2024-01-15 12:00:00,31.2,2.5,15.3,rain
+2024-01-15 18:00:00,27.8,0.0,9.1,clear

@@ -1,6 +1,7 @@
 """
 Bronze / Silver / Gold data lake storage utilities for the admin UI.
-Each upload run creates a timestamped directory with three sub-layers.
+Each upload run creates a timestamped directory with three sub-layers,
+scoped under a named project.
 """
 import json
 import logging
@@ -15,6 +16,7 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 DATA_LAKE_ROOT = Path("data_lake_outputs")
+PROJECTS_ROOT = DATA_LAKE_ROOT / "projects"
 
 
 def _safe_name(text: str) -> str:
@@ -22,21 +24,86 @@ def _safe_name(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", text.strip().lower()).strip("_")
 
 
-def create_layered_run(context: str) -> Dict[str, Path]:
-    """
-    Create a run-scoped directory with bronze / silver / gold sub-folders.
+# ---------------------------------------------------------------------------
+# Project management
+# ---------------------------------------------------------------------------
 
-    Args:
-        context: Human-readable label (e.g. schema name). Sanitised for the filesystem.
+def create_project(name: str) -> Path:
+    """Create a project directory and return its path.
 
-    Returns:
-        Dict with keys 'root', 'bronze', 'silver', 'gold' mapping to Paths.
+    The directory layout is::
+
+        data_lake_outputs/projects/<slug>/runs/
     """
+    slug = _safe_name(name)
+    if not slug:
+        raise ValueError("Project name must contain at least one alphanumeric character.")
+    project_dir = PROJECTS_ROOT / slug
+    (project_dir / "runs").mkdir(parents=True, exist_ok=True)
+    meta_path = project_dir / "project.json"
+    if not meta_path.exists():
+        meta_path.write_text(json.dumps({
+            "name": name,
+            "slug": slug,
+            "created_at": datetime.now().isoformat(),
+        }, indent=2))
+    logger.info(f"Project ensured at {project_dir}")
+    return project_dir
+
+
+def list_projects() -> List[Dict[str, Any]]:
+    """Return metadata dicts for every project, sorted by creation date (newest first)."""
+    projects: List[Dict[str, Any]] = []
+    if not PROJECTS_ROOT.exists():
+        return projects
+    for meta_path in sorted(PROJECTS_ROOT.glob("*/project.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        try:
+            data = json.loads(meta_path.read_text())
+            data["path"] = str(meta_path.parent)
+            projects.append(data)
+        except Exception:
+            continue
+    return projects
+
+
+def list_project_runs(project_slug: str) -> List[Dict[str, Any]]:
+    """Return lineage metadata for every run inside a project, newest first."""
+    runs_dir = PROJECTS_ROOT / project_slug / "runs"
+    runs: List[Dict[str, Any]] = []
+    if not runs_dir.exists():
+        return runs
+    for lineage_path in sorted(runs_dir.glob("*/lineage.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        try:
+            data = json.loads(lineage_path.read_text())
+            data["run_root"] = str(lineage_path.parent)
+            runs.append(data)
+        except Exception:
+            continue
+    return runs
+
+
+# ---------------------------------------------------------------------------
+# Layered run creation
+# ---------------------------------------------------------------------------
+
+def create_layered_run(context: str) -> Dict[str, Any]:
+    """Legacy: create a run outside any project (kept for backwards compatibility)."""
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_id = f"run_id_{ts}_{_safe_name(context)}"
     root = DATA_LAKE_ROOT / run_id
+    return _build_run_paths(root, run_id)
 
-    paths = {
+
+def create_project_layered_run(project_slug: str, context: str) -> Dict[str, Any]:
+    """Create a versioned run under a project's ``runs/`` directory."""
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_id = f"run_id_{ts}_{_safe_name(context)}"
+    root = PROJECTS_ROOT / project_slug / "runs" / run_id
+    return _build_run_paths(root, run_id)
+
+
+def _build_run_paths(root: Path, run_id: str) -> Dict[str, Any]:
+    paths: Dict[str, Any] = {
         "root": root,
         "bronze": root / "bronze",
         "silver": root / "silver",
@@ -45,7 +112,6 @@ def create_layered_run(context: str) -> Dict[str, Path]:
     }
     for key in ("bronze", "silver", "gold"):
         paths[key].mkdir(parents=True, exist_ok=True)
-
     logger.info(f"Created layered run at {root}")
     return paths
 

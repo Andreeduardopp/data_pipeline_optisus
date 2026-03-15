@@ -46,3 +46,40 @@ streamlit run admin_ui.py
 ```
 
 The app will open in your browser (default: http://localhost:8501).
+
+## How it works
+
+### Projects
+
+The first screen lists your **projects**. A project is a named container for
+all the data-lake runs that belong to a single study or scenario.
+
+1. **Create a project** — type a name and click *Create project*.
+2. **Select a project** — pick one from the dropdown.
+3. **Upload data** — switch to the *Tabular Data* or *Spatial Data* tab and
+   upload files as before. Each "Validate & Save" creates a new versioned run
+   inside the selected project.
+
+### Storage layout
+
+```
+data_lake_outputs/
+└── projects/
+    └── <project_slug>/
+        ├── project.json          # project metadata
+        └── runs/
+            └── run_id_<ts>_<ctx>/
+                ├── bronze/       # raw uploaded files
+                ├── silver/       # validated Parquet / reports
+                ├── gold/         # aggregate metrics
+                └── lineage.json  # links all three layers
+```
+
+Legacy runs created before the project feature (`data_lake_outputs/run_id_*`)
+remain on disk but are not shown in the UI.
+
+## Running tests
+
+```bash
+uv run pytest
+```

@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Type, Tuple
 from pydantic import BaseModel
 
 # Tabular schema models only (exclude GeographicData, which is for JSON config)
+# Gold-layer output schemas are also excluded — they validate pipeline output, not uploads.
 from schemas import (
     FleetIdentification,
     FleetEnergyPerformance,
@@ -14,6 +15,10 @@ from schemas import (
     OperationsAndCirculation,
     TransportedPassengers,
     ChargingInfrastructure,
+    CalendarEvent,
+    WeatherObservation,
+    StopSpatialFeatures,
+    StopConnection,
     FinancialEconomicData,
     LifespanAndDepreciation,
 )
@@ -25,6 +30,10 @@ TABULAR_SCHEMAS: List[Tuple[str, Type[BaseModel]]] = [
     ("Operations and Circulation", OperationsAndCirculation),
     ("Transported Passengers", TransportedPassengers),
     ("Charging Infrastructure", ChargingInfrastructure),
+    ("Calendar Events", CalendarEvent),
+    ("Weather Observations", WeatherObservation),
+    ("Stop Spatial Features", StopSpatialFeatures),
+    ("Stop Connections", StopConnection),
     ("Financial & Economic Data", FinancialEconomicData),
     ("Lifespan and Depreciation", LifespanAndDepreciation),
 ]

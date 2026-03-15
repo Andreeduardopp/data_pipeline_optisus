@@ -1,0 +1,6 @@
+timestamp,line_id,stop_id,direction_id,temporal_resolution,number_of_validations,number_of_users,boarding_count,alighting_count,passenger_km_index,fare_category
+2024-01-15 07:00:00,L001,S001,0,hourly,185,170,185,12,3.8,single_ticket
+2024-01-15 07:00:00,L001,S002,0,hourly,142,130,120,45,3.8,monthly_pass
+2024-01-15 07:00:00,L001,S003,0,hourly,98,90,35,98,3.8,student
+2024-01-15 08:00:00,L002,S004,0,hourly,210,195,210,18,4.1,single_ticket
+2024-01-15 08:00:00,L002,S005,0,hourly,165,150,88,72,4.1,senior

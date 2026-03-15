@@ -1,0 +1,5 @@
+avg_consumption_per_vehicle,energy_cons_per_pax_km,average_co2_emissions,operational_status
+0.45,0.032,1180.5,true
+0.50,0.036,1320.0,true
+1.20,0.018,0.0,true
+1.05,0.020,0.0,false

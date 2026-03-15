@@ -1,0 +1,6 @@
+source_stop_id,target_stop_id,line_id,direction_id,sequence_order,distance_km,travel_time_seconds
+S001,S002,L001,0,1,2.3,420
+S002,S003,L001,0,2,3.1,540
+S003,S006,L001,0,3,1.8,360
+S004,S005,L002,0,1,2.8,480
+S005,S006,L002,0,2,1.5,300

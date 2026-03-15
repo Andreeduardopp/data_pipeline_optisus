@@ -1,0 +1,40 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "line_id": "L001",
+        "route_name": "Asa Norte - Rodoviaria",
+        "direction_id": 0,
+        "route_length_km": 18.5
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-47.9292, -15.7801],
+          [-47.9200, -15.7750],
+          [-47.9350, -15.7850],
+          [-47.9250, -15.7830]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "line_id": "L002",
+        "route_name": "Asa Sul - Rodoviaria",
+        "direction_id": 0,
+        "route_length_km": 22.0
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-47.9280, -15.7900],
+          [-47.9320, -15.7950],
+          [-47.9250, -15.7830]
+        ]
+      }
+    }
+  ]
+}

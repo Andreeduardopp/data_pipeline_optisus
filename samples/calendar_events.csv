@@ -1,0 +1,5 @@
+event_date,event_type,event_description,affected_lines,expected_demand_factor
+2024-01-01,holiday,Confraternizacao Universal,,0.3
+2024-01-15,school_break,Ferias escolares de verao,,0.7
+2024-01-22,strike,Paralisacao parcial dos motoristas,"L001,L002",0.2
+2024-01-25,special_event,Aniversario de Brasilia,,1.5

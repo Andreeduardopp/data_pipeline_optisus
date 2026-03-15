@@ -1,0 +1,7 @@
+stop_id,stop_name,latitude,longitude,zone_id,zone_type,elevation_m,population_density,num_lines_served,is_terminal,is_interchange
+S001,Estacao Central,-15.7801,-47.9292,Z01,urban,1050.0,12500.0,2,false,true
+S002,Terminal Norte,-15.7750,-47.9200,Z01,urban,1060.0,9800.0,1,true,false
+S003,Praca Sul,-15.7850,-47.9350,Z02,urban,1045.0,11200.0,1,false,false
+S004,Asa Sul Inicio,-15.7900,-47.9280,Z03,suburban,1035.0,7200.0,1,true,false
+S005,Setor Comercial,-15.7950,-47.9320,Z03,urban,1040.0,15000.0,2,false,true
+S006,Rodoviaria,-15.7830,-47.9250,Z01,urban,1055.0,18000.0,2,false,true

@@ -1,0 +1,7 @@
+line_id,stop_id,direction_id,stop_sequence,stops_coordinates,service_start_time,service_end_time,average_trip_duration,operating_lines,route_length,deadhead_kilometers,avg_operational_speed,speed_profile,punctuality_delays,average_dwell_time,avg_vehicle_occupancy,frequency,infrastructure_location,historical_data
+L001,S001,0,1,"(-15.7801, -47.9292)",05:30:00,23:00:00,3600,L001 Asa Norte - Rodoviaria,18.5,4.2,22.0,18.0,180,25,62.5,120,Garagem Central SIA,
+L001,S002,0,2,"(-15.7750, -47.9200)",05:30:00,23:00:00,3600,L001 Asa Norte - Rodoviaria,18.5,4.2,22.0,18.0,180,25,58.0,120,Garagem Central SIA,
+L001,S003,0,3,"(-15.7850, -47.9350)",05:30:00,23:00:00,3600,L001 Asa Norte - Rodoviaria,18.5,4.2,22.0,18.0,180,25,55.0,120,Garagem Central SIA,
+L002,S004,0,1,"(-15.7900, -47.9280)",05:00:00,22:30:00,4200,L002 Asa Sul - Rodoviaria,22.0,5.1,20.0,16.0,240,30,70.0,96,Garagem Central SIA,
+L002,S005,0,2,"(-15.7950, -47.9320)",05:00:00,22:30:00,4200,L002 Asa Sul - Rodoviaria,22.0,5.1,20.0,16.0,240,30,65.0,96,Garagem Central SIA,
+L002,S006,0,3,"(-15.7830, -47.9250)",05:00:00,22:30:00,4200,L002 Asa Sul - Rodoviaria,22.0,5.1,20.0,16.0,240,30,68.0,96,Garagem Central SIA,

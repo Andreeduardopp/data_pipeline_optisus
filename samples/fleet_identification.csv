@@ -1,0 +1,5 @@
+owner_operator,vehicle_type,manufacturer_model,vehicle_id,emissions_standard,total_capacity,seated_capacity,average_age
+Empresa Brasiliense de Transportes,diesel,Mercedes-Benz OF 1721 BlueTec 5,V001,Euro V,80,42,6
+Empresa Brasiliense de Transportes,diesel,Volkswagen 17.230 OD,V002,Euro V,75,40,8
+Empresa Brasiliense de Transportes,electric,BYD D9W,V003,EEV,70,38,2
+Empresa Brasiliense de Transportes,electric,BYD K7M,V004,EEV,55,30,1
