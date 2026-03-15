@@ -60,19 +60,53 @@ all the data-lake runs that belong to a single study or scenario.
    upload files as before. Each "Validate & Save" creates a new versioned run
    inside the selected project.
 
+### Dual-mode forecasting (Mode A / Mode B)
+
+When you open a project, a **Forecasting Modes** panel shows two modes
+side-by-side with a live requirements checklist:
+
+| | Mode A | Mode B |
+|---|---|---|
+| **Goal** | Multivariate time-series demand forecasting | Spatio-temporal graph forecasting |
+| **Required datasets** | Transported Passengers, Financial & Economic Data | Transported Passengers, Stop Spatial Features, Stop Connections |
+| **Optional datasets** | Weather Observations, Calendar Events | Weather Observations, Calendar Events |
+| **Gold output** | `mode_a_timeseries.parquet` (+ economic context) | `mode_b_spatiotemporal.parquet` + `network_topology.json` |
+| **Target models** | LSTM / Transformer | GNN / Graph-Transformer |
+
+**Quality Gate** — the *Build* button is only enabled when every required
+dataset for the selected mode has been uploaded and validated into Silver.
+If prerequisites are missing, the UI shows exactly which datasets still need
+to be provided.
+
+**Workflow:**
+
+1. Upload the required (and optionally enrichment) datasets via the
+   *Tabular Data* tab, selecting the matching schema for each file.
+2. Select **Mode A** or **Mode B** and click **Build**.
+3. The pipeline reads the latest Silver artifacts, applies temporal feature
+   engineering, validates each output row against the Gold-layer Pydantic
+   schema, and writes the result into a new versioned Gold run.
+
 ### Storage layout
 
 ```
 data_lake_outputs/
 └── projects/
     └── <project_slug>/
-        ├── project.json          # project metadata
+        ├── project.json
         └── runs/
-            └── run_id_<ts>_<ctx>/
-                ├── bronze/       # raw uploaded files
-                ├── silver/       # validated Parquet / reports
-                ├── gold/         # aggregate metrics
-                └── lineage.json  # links all three layers
+            ├── run_id_<ts>_<schema>/        # per-upload runs
+            │   ├── bronze/                  # raw uploaded files
+            │   ├── silver/                  # validated Parquet / reports
+            │   ├── gold/                    # aggregate metrics
+            │   └── lineage.json
+            └── run_id_<ts>_mode_a_build/    # mode build runs
+                ├── gold/
+                │   ├── mode_a_timeseries.parquet
+                │   ├── mode_a_economic_context.parquet
+                │   └── mode_a_timeseries_metrics.json
+                ├── lineage.json
+                └── _SUCCESS
 ```
 
 Legacy runs created before the project feature (`data_lake_outputs/run_id_*`)

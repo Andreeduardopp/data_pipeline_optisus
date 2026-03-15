@@ -83,3 +83,95 @@ def get_default_required_fields(model_class: Type[BaseModel]) -> List[str]:
 def get_all_field_names(model_class: Type[BaseModel]) -> List[str]:
     """Return all field names of the model in definition order."""
     return list(model_class.model_fields.keys())
+
+
+def generate_template_csv(model_class: Type[BaseModel]) -> str:
+    """Return a CSV string with two rows: column headers and a description hint row."""
+    fields = get_schema_fields(model_class)
+    header = ",".join(f["name"] for f in fields)
+    hints = ",".join(
+        f'"{f["description"]}"' if "," in f["description"] else f["description"]
+        for f in fields
+    )
+    return f"{header}\n{hints}\n"
+
+
+# ---------------------------------------------------------------------------
+# Dual-mode requirements
+# ---------------------------------------------------------------------------
+
+MODE_A = "Mode A"
+MODE_B = "Mode B"
+
+MODE_REQUIREMENTS: Dict[str, Dict[str, List[str]]] = {
+    MODE_A: {
+        "required": [
+            "Transported Passengers",
+            "Financial & Economic Data",
+        ],
+        "optional": [
+            "Weather Observations",
+            "Calendar Events",
+        ],
+    },
+    MODE_B: {
+        "required": [
+            "Transported Passengers",
+            "Stop Spatial Features",
+            "Stop Connections",
+        ],
+        "optional": [
+            "Weather Observations",
+            "Calendar Events",
+        ],
+    },
+}
+
+MODE_DESCRIPTIONS: Dict[str, Dict[str, str]] = {
+    MODE_A: {
+        "title": "Multivariate Time-Series Forecasting",
+        "description": (
+            "Produces TimeSeriesDemandSample artifacts: demand sequences "
+            "grouped by line, enriched with temporal features, weather, and "
+            "macroeconomic indicators. Suitable for LSTM / Transformer models."
+        ),
+        "output_artifact": "mode_a_timeseries.parquet",
+    },
+    MODE_B: {
+        "title": "Spatio-Temporal Graph Forecasting",
+        "description": (
+            "Produces SpatioTemporalDemandSample artifacts and a NetworkTopology "
+            "graph (nodes + edges). Suitable for GNN / Graph-Transformer models."
+        ),
+        "output_artifact": "mode_b_spatiotemporal.parquet + network_topology.json",
+    },
+}
+
+
+def get_mode_requirements(mode: str) -> Dict[str, List[str]]:
+    """Return {'required': [...], 'optional': [...]} dataset labels for a mode."""
+    return MODE_REQUIREMENTS[mode]
+
+
+def get_mode_dataset_checklist(
+    mode: str,
+    available_datasets: Dict[str, str],
+) -> List[Dict[str, Any]]:
+    """Build a checklist marking each dataset as present/missing for the mode."""
+    reqs = MODE_REQUIREMENTS[mode]
+    checklist: List[Dict[str, Any]] = []
+    for label in reqs["required"]:
+        checklist.append({
+            "dataset": label,
+            "kind": "required",
+            "available": label in available_datasets,
+            "path": available_datasets.get(label),
+        })
+    for label in reqs["optional"]:
+        checklist.append({
+            "dataset": label,
+            "kind": "optional",
+            "available": label in available_datasets,
+            "path": available_datasets.get(label),
+        })
+    return checklist

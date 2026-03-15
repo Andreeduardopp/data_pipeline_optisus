@@ -83,6 +83,38 @@ def list_project_runs(project_slug: str) -> List[Dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
+# Silver dataset discovery
+# ---------------------------------------------------------------------------
+
+def get_project_silver_datasets(project_slug: str) -> Dict[str, str]:
+    """Return {dataset_context: latest_silver_data_file_path} for a project.
+
+    Scans every run's lineage and keeps the most recent Silver data file
+    (.parquet / .geoparquet) per context label.  Validation-report JSONs are
+    excluded.
+    """
+    runs_dir = PROJECTS_ROOT / project_slug / "runs"
+    if not runs_dir.exists():
+        return {}
+
+    available: Dict[str, str] = {}
+    for lineage_path in sorted(
+        runs_dir.glob("*/lineage.json"),
+        key=lambda p: p.stat().st_mtime,
+    ):
+        try:
+            data = json.loads(lineage_path.read_text())
+        except Exception:
+            continue
+        context = data.get("context", "")
+        for artifact in data.get("silver", []):
+            p = Path(artifact)
+            if p.suffix in (".parquet", ".geoparquet") and p.exists():
+                available[context] = str(p)
+    return available
+
+
+# ---------------------------------------------------------------------------
 # Layered run creation
 # ---------------------------------------------------------------------------
 

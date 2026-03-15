@@ -1,11 +1,13 @@
 """
 Streamlit admin UI: manage projects, upload files, choose schema, set mandatory
-parameters, run validation.  Persists data through Bronze -> Silver -> Gold layers
-scoped under a named project.
+parameters, run validation, and build mode-specific ML artifacts.
+
+Persists data through Bronze -> Silver -> Gold layers scoped under a named project.
 
 Two views:
   - Home: project cards grid + creation form
-  - Project detail: run history + upload tabs (Tabular / Spatial)
+  - Project detail: forecasting-mode panel (requirements + quality gate + build),
+    run history, and upload tabs (Tabular / Spatial)
 """
 import tempfile
 from pathlib import Path
@@ -16,6 +18,11 @@ from ui_validation import (
     TABULAR_SCHEMAS,
     get_default_required_fields,
     get_all_field_names,
+    generate_template_csv,
+    MODE_A,
+    MODE_B,
+    MODE_DESCRIPTIONS,
+    get_mode_dataset_checklist,
 )
 from ingestion_tabular import read_tabular_for_preview, validate_tabular_for_ui
 from ingestion_geo import read_spatial_for_preview, validate_spatial_data
@@ -24,6 +31,7 @@ from storage_layers import (
     list_projects,
     list_project_runs,
     create_project_layered_run,
+    get_project_silver_datasets,
     save_bronze_bytes,
     save_silver_tabular,
     save_silver_spatial,
@@ -32,6 +40,11 @@ from storage_layers import (
     build_gold_spatial_metrics,
     save_gold_metrics,
     write_layer_lineage,
+)
+from mode_builders import (
+    evaluate_quality_gate,
+    build_mode_a_artifacts,
+    build_mode_b_artifacts,
 )
 
 st.set_page_config(page_title="Optisus Ingestion Admin", layout="wide")
@@ -104,6 +117,87 @@ def _render_home() -> None:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Mode panel — requirements checklist, quality gate, build trigger
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _render_mode_panel(project_slug: str) -> None:
+    """Show forecasting-mode requirements, quality gate, and build trigger."""
+    st.subheader("Forecasting Modes")
+
+    available = get_project_silver_datasets(project_slug)
+
+    # --- Two-column requirements overview ---
+    col_a, col_b = st.columns(2)
+    for col, mode in ((col_a, MODE_A), (col_b, MODE_B)):
+        with col:
+            info = MODE_DESCRIPTIONS[mode]
+            with st.container(border=True):
+                st.markdown(f"**{info['title']}**")
+                st.caption(info["description"])
+                st.caption(f"Output: `{info['output_artifact']}`")
+                checklist = get_mode_dataset_checklist(mode, available)
+                for item in checklist:
+                    if item["available"]:
+                        icon = "✅"
+                    elif item["kind"] == "optional":
+                        icon = "⬜"
+                    else:
+                        icon = "❌"
+                    st.markdown(f"{icon} {item['dataset']} *({item['kind']})*")
+
+    # --- Mode selector + build action ---
+    selected_mode = st.radio(
+        "Select mode to build",
+        options=[MODE_A, MODE_B],
+        horizontal=True,
+        key="mode_selector",
+    )
+
+    gate_passed, missing = evaluate_quality_gate(selected_mode, available)
+
+    if gate_passed:
+        if st.button(
+            f"Build {selected_mode} Artifacts",
+            key="btn_build_mode",
+            type="primary",
+            use_container_width=True,
+        ):
+            with st.spinner(f"Building {selected_mode} artifacts..."):
+                if selected_mode == MODE_A:
+                    run_path, warnings = build_mode_a_artifacts(
+                        project_slug, available
+                    )
+                else:
+                    run_path, warnings = build_mode_b_artifacts(
+                        project_slug, available
+                    )
+
+            if run_path:
+                st.success(f"Build complete — {run_path}")
+                if warnings:
+                    with st.expander(f"{len(warnings)} warning(s)"):
+                        for w in warnings[:50]:
+                            st.text(w)
+                        if len(warnings) > 50:
+                            st.caption(f"... and {len(warnings) - 50} more.")
+            else:
+                st.error("Build failed.")
+                for w in (warnings or [])[:20]:
+                    st.text(w)
+    else:
+        st.warning(
+            f"**Quality Gate — {selected_mode}:** upload the missing required "
+            f"datasets before building: {', '.join(missing)}"
+        )
+        st.button(
+            f"Build {selected_mode} Artifacts",
+            key="btn_build_mode",
+            disabled=True,
+            use_container_width=True,
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Page: Project detail — run history + upload tabs
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -131,6 +225,11 @@ def _render_project(project: dict) -> None:
 
     st.divider()
 
+    # --- Forecasting mode panel ---
+    _render_mode_panel(project_slug)
+
+    st.divider()
+
     # --- Upload tabs ---
     schema_options = [label for label, _ in TABULAR_SCHEMAS]
     tab_tabular, tab_spatial = st.tabs(["Tabular Data", "Spatial Data"])
@@ -148,6 +247,16 @@ def _render_project(project: dict) -> None:
 
         schema_choice = st.selectbox("Schema model", options=schema_options, key="tabular_schema")
         model_class = next(m for label, m in TABULAR_SCHEMAS if label == schema_choice)
+
+        template_csv = generate_template_csv(model_class)
+        safe_name = schema_choice.lower().replace(" ", "_").replace("&", "and")
+        st.download_button(
+            f"Download {schema_choice} template (.csv)",
+            data=template_csv,
+            file_name=f"{safe_name}_template.csv",
+            mime="text/csv",
+            key="btn_download_template",
+        )
 
         all_fields = get_all_field_names(model_class)
         default_required = get_default_required_fields(model_class)
