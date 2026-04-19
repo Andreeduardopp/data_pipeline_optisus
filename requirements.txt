@@ -4,3 +4,5 @@ pyarrow
 openpyxl
 geopandas
 streamlit
+gtfs-kit>=10.0
+streamlit-folium>=0.22

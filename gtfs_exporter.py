@@ -26,6 +26,7 @@ from gtfs_database import (
     get_table_count,
     GTFS_DB_FILENAME,
 )
+from gtfs_validator import GtfsValidationReport, validate_gtfs_feed
 from storage_layers import PROJECTS_ROOT
 
 logger = logging.getLogger(__name__)
@@ -316,6 +317,124 @@ def export_gtfs_feed(
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Subset export (date / route slices via gtfs-kit)
+# ═══════════════════════════════════════════════════════════════════════════
+
+def export_gtfs_subset(
+    project_slug: str,
+    *,
+    dates: Optional[List[str]] = None,
+    route_ids: Optional[List[str]] = None,
+    output_dir: Optional[str] = None,
+) -> ExportResult:
+    """Export a date- or route-restricted subset of the GTFS feed.
+
+    Uses gtfs-kit's ``restrict_to_dates`` / ``restrict_to_routes`` on the
+    Feed built from the project's SQLite DB, then writes a ``.zip``.
+
+    Args:
+        project_slug: project containing the GTFS database.
+        dates: optional list of YYYYMMDD strings to keep.
+        route_ids: optional list of route_ids to keep.
+        output_dir: destination directory (defaults to project ``exports/``).
+
+    Notes:
+        - GTFS-ride extension tables (board_alight, ridership, etc.) are
+          **not** included — gtfs-kit's Feed schema doesn't cover them.
+        - Does **not** update ``exports/latest/`` — that mirror is
+          reserved for full exports.
+    """
+    result = ExportResult()
+
+    if not dates and not route_ids:
+        result.errors.append("Provide at least one of `dates` or `route_ids`.")
+        return result
+
+    # Lazy import to avoid hard-coupling when gtfs-kit isn't installed
+    try:
+        from gtfs_kit_bridge import GTFS_KIT_AVAILABLE, feed_from_db
+    except ImportError:
+        result.errors.append("gtfs-kit bridge not available.")
+        return result
+
+    if not GTFS_KIT_AVAILABLE:
+        result.errors.append(
+            "gtfs-kit is not installed — run `uv sync` to enable subset exports."
+        )
+        return result
+
+    feed = feed_from_db(project_slug)
+    if feed is None:
+        result.errors.append(
+            "Feed could not be built. Ensure agency, stops, routes, and "
+            "trips all have records."
+        )
+        return result
+
+    # Apply restrictions in sequence
+    try:
+        if route_ids:
+            feed = feed.restrict_to_routes(route_ids)
+        if dates:
+            feed = feed.restrict_to_dates(dates)
+    except Exception as exc:
+        result.errors.append(f"Failed to apply restrictions: {exc}")
+        return result
+
+    # Sanity-check the resulting feed has any trips left
+    if feed.trips is None or feed.trips.empty:
+        result.errors.append(
+            "No trips remain after applying the filters. Check your date "
+            "range and route selection."
+        )
+        return result
+
+    # Determine output path
+    if output_dir is None:
+        export_root = PROJECTS_ROOT / project_slug / "exports"
+    else:
+        export_root = Path(output_dir)
+    export_root.mkdir(parents=True, exist_ok=True)
+
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    zip_filename = f"gtfs_subset_{ts}.zip"
+    zip_path = export_root / zip_filename
+
+    try:
+        feed.to_file(zip_path)
+    except Exception as exc:
+        result.errors.append(f"Failed to write subset .zip: {exc}")
+        return result
+
+    # Count records written (sum across core tables on the restricted feed)
+    total = 0
+    for name in ("agency", "stops", "routes", "trips", "stop_times",
+                 "calendar", "calendar_dates", "shapes", "frequencies",
+                 "transfers", "feed_info"):
+        df = getattr(feed, name, None)
+        if df is not None and not df.empty:
+            total += len(df)
+            result.files_included.append(f"{name}.txt")
+
+    result.total_records = total
+    result.success = True
+    result.zip_path = str(zip_path)
+    result.warnings.append(
+        "GTFS-ride extension tables (board_alight, ridership, "
+        "ride_feed_info, trip_capacity) are not included in subset exports."
+    )
+
+    logger.info(
+        "GTFS subset exported to %s (%d files, %d records, "
+        "dates=%s, routes=%s)",
+        zip_path, len(result.files_included), total,
+        f"{len(dates)} day(s)" if dates else "all",
+        f"{len(route_ids)} route(s)" if route_ids else "all",
+    )
+    return result
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Export history
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -342,10 +461,50 @@ def list_exports(project_slug: str) -> List[Dict[str, Any]]:
             "created_at": datetime.fromtimestamp(
                 stat.st_mtime, tz=timezone.utc,
             ).isoformat(),
+            "is_subset": p.name.startswith("gtfs_subset_"),
         })
 
     exports.sort(key=lambda e: e["created_at"], reverse=True)
     return exports
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Latest-export validation
+# ═══════════════════════════════════════════════════════════════════════════
+
+def latest_export_path(project_slug: str) -> Optional[Path]:
+    """Return the path to the project's most recent GTFS export, or None.
+
+    Prefers the stable ``exports/latest/gtfs.zip`` mirror that
+    ``export_gtfs_feed`` maintains.  Falls back to the newest
+    ``gtfs_*.zip`` if the mirror is missing.
+    """
+    export_root = PROJECTS_ROOT / project_slug / "exports"
+    latest_mirror = export_root / "latest" / "gtfs.zip"
+    if latest_mirror.exists():
+        return latest_mirror
+    if not export_root.exists():
+        return None
+    # Prefer full exports over subset exports for the "latest" pointer.
+    candidates = sorted(
+        (p for p in export_root.glob("gtfs_*.zip")
+         if not p.name.startswith("gtfs_subset_")),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    return candidates[0] if candidates else None
+
+
+def validate_latest_export(project_slug: str) -> Optional[GtfsValidationReport]:
+    """Run ``gtfs_validator`` against the latest exported ZIP.
+
+    Returns ``None`` if no export exists yet.  The caller is responsible
+    for caching if invoked from a hot UI path.
+    """
+    zip_path = latest_export_path(project_slug)
+    if zip_path is None:
+        return None
+    return validate_gtfs_feed(str(zip_path))
 
 
 # ═══════════════════════════════════════════════════════════════════════════

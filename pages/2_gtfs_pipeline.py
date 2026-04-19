@@ -35,8 +35,18 @@ from gtfs_database import (
 from gtfs_exporter import (
     compute_feed_completeness,
     export_gtfs_feed,
+    export_gtfs_subset,
+    latest_export_path,
     list_exports,
     validate_before_export,
+    validate_latest_export,
+)
+from gtfs_kit_bridge import (
+    GTFS_KIT_AVAILABLE,
+    build_routes_map,
+    compute_analytics,
+    db_signature,
+    feed_from_db,
 )
 from gtfs_mapper import (
     _SCHEMA_TO_MAPPER,
@@ -185,8 +195,13 @@ def _level_card(
     label: str,
     metric: str,
     current: int,
+    badge: tuple[str, str] | None = None,
 ) -> str:
-    """Render one level card as HTML."""
+    """Render one level card as HTML.
+
+    ``badge`` is an optional ``(text, color)`` pair shown as a pill below
+    the metric line — used by Level 4 to indicate feed-quality status.
+    """
     if level < current:
         bg = f"linear-gradient(135deg, {TEAL_1}88, {TEAL_2}aa)"
         border = TEAL_1
@@ -203,6 +218,16 @@ def _level_card(
         icon = "🔲"
         label_color = TEXT_MUTED
 
+    badge_html = ""
+    if badge is not None:
+        badge_text, badge_color = badge
+        badge_html = (
+            f"<div style='display:inline-block;margin-top:0.4rem;padding:0.15rem 0.55rem;"
+            f"border-radius:10px;background:{badge_color}22;border:1px solid {badge_color};"
+            f"color:{badge_color};font-weight:600;font-size:0.72rem;'>"
+            f"{badge_text}</div>"
+        )
+
     return (
         f"<div style='background:{bg};border:1px solid {border};"
         f"border-radius:10px;padding:1rem;text-align:center;flex:1;'>"
@@ -210,8 +235,41 @@ def _level_card(
         f"<div style='color:{TEXT_PRIMARY};font-weight:600;font-size:0.85rem;'>Level {level}</div>"
         f"<div style='color:{label_color};font-weight:700;font-size:0.95rem;margin:0.25rem 0;'>{label}</div>"
         f"<div style='color:{TEXT_MUTED};font-size:0.75rem;'>{metric}</div>"
+        f"{badge_html}"
         f"</div>"
     )
+
+
+# ─── Quality tag for Level 4 ──────────────────────────────────────────────
+# Tags: "certified" | "warnings" | "draft" | "none"
+_QUALITY_BADGE: dict[str, tuple[str, str]] = {
+    "certified": ("✓ Certified",       SUCCESS),
+    "warnings":  ("⚠ Warnings",        WARNING),
+    "draft":     ("✗ Draft",           ERROR),
+}
+
+
+@st.cache_data(show_spinner=False)
+def _cached_latest_validation(slug: str, sig: tuple):
+    """Cache the validator report keyed on (zip path, mtime)."""
+    del sig  # only used for cache invalidation
+    return validate_latest_export(slug)
+
+
+def _compute_quality_tag(slug: str) -> tuple[str, int, int]:
+    """Return ``(tag, error_count, warning_count)`` for the latest export."""
+    zp = latest_export_path(slug)
+    if zp is None:
+        return ("none", 0, 0)
+    sig = (str(zp), zp.stat().st_mtime)
+    report = _cached_latest_validation(slug, sig)
+    if report is None:
+        return ("none", 0, 0)
+    if report.error_count > 0:
+        return ("draft", report.error_count, report.warning_count)
+    if report.warning_count > 0:
+        return ("warnings", 0, report.warning_count)
+    return ("certified", 0, 0)
 
 
 def _render_maturity_dashboard(project_slug: str, level: int) -> None:
@@ -231,6 +289,17 @@ def _render_maturity_dashboard(project_slug: str, level: int) -> None:
     else:
         l3_metric = "not yet"
     l4_metric = f"{len(exports)} feed(s) exported" if exports else "not yet"
+
+    # Quality badge for Level 4 (validates latest export; cached on mtime)
+    q_tag, q_errs, q_warns = _compute_quality_tag(project_slug)
+    q_badge: tuple[str, str] | None = None
+    if q_tag in _QUALITY_BADGE:
+        text, color = _QUALITY_BADGE[q_tag]
+        if q_tag == "draft":
+            text = f"✗ Draft · {q_errs} err"
+        elif q_tag == "warnings":
+            text = f"⚠ {q_warns} warn"
+        q_badge = (text, color)
 
     # ── Progress indicator dots ───────────────────────────────────────────
     def _dot(lvl: int) -> str:
@@ -268,7 +337,7 @@ def _render_maturity_dashboard(project_slug: str, level: int) -> None:
         + _level_card(1, "Raw Data", l1_metric, level)
         + _level_card(2, "Validated", l2_metric, level)
         + _level_card(3, "Database", l3_metric, level)
-        + _level_card(4, "GTFS Feed", l4_metric, level)
+        + _level_card(4, "GTFS Feed", l4_metric, level, badge=q_badge)
         + f"</div>"
     )
 
@@ -363,6 +432,122 @@ def _render_completeness_gauge(project_slug: str) -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 # Export section
 # ═══════════════════════════════════════════════════════════════════════════
+
+def _render_subset_export(slug: str) -> None:
+    """Expander with date + route pickers → gtfs-kit subset export."""
+    if not GTFS_KIT_AVAILABLE:
+        return
+
+    sig = db_signature(slug)
+    if sig is None:
+        return
+
+    feed = _cached_feed(slug, sig)
+    if feed is None:
+        return
+
+    try:
+        active_dates = feed.get_dates()
+    except Exception:
+        active_dates = []
+
+    with st.expander("Export subset (by date or route)", expanded=False):
+        if not active_dates:
+            st.info(
+                "No active service dates found in calendar / calendar_dates — "
+                "subset export needs at least one populated service pattern."
+            )
+            return
+
+        st.caption(
+            f"Service active on {len(active_dates)} date(s): "
+            f"**{active_dates[0]} → {active_dates[-1]}**. "
+            "Subset exports skip GTFS-ride tables."
+        )
+
+        # ── Date range picker ────────────────────────────────────────────
+        import datetime as _dt
+        d_min = _dt.datetime.strptime(active_dates[0], "%Y%m%d").date()
+        d_max = _dt.datetime.strptime(active_dates[-1], "%Y%m%d").date()
+        d_default_end = min(d_min + _dt.timedelta(days=6), d_max)
+
+        date_range = st.date_input(
+            "Date range",
+            value=(d_min, d_default_end),
+            min_value=d_min,
+            max_value=d_max,
+            key="subset_date_range",
+        )
+
+        # Streamlit returns a single date or a tuple depending on interaction
+        if isinstance(date_range, tuple) and len(date_range) == 2:
+            d_start, d_end = date_range
+        else:
+            d_start = d_end = date_range
+
+        # ── Route picker ─────────────────────────────────────────────────
+        route_options: list[str] = []
+        route_labels: dict[str, str] = {}
+        try:
+            rdf = feed.routes
+            if rdf is not None and not rdf.empty:
+                for _, row in rdf.iterrows():
+                    rid = row["route_id"]
+                    short = row.get("route_short_name") or ""
+                    long = row.get("route_long_name") or ""
+                    label = f"{rid} — {short} {long}".strip()
+                    route_options.append(rid)
+                    route_labels[rid] = label
+        except Exception:
+            pass
+
+        selected_routes = st.multiselect(
+            "Routes (optional — leave empty for all)",
+            options=route_options,
+            format_func=lambda rid: route_labels.get(rid, rid),
+            key="subset_routes",
+        )
+
+        # ── Go button ────────────────────────────────────────────────────
+        if st.button("Export subset", key="btn_export_subset"):
+            # Build the date list (inclusive), intersected with active_dates
+            active_set = set(active_dates)
+            days = (d_end - d_start).days + 1
+            wanted = [
+                (d_start + _dt.timedelta(days=i)).strftime("%Y%m%d")
+                for i in range(max(days, 0))
+            ]
+            dates = [d for d in wanted if d in active_set]
+
+            if not dates:
+                st.warning(
+                    "No active service dates fall inside the selected range."
+                )
+                return
+
+            with st.spinner(
+                f"Building subset for {len(dates)} day(s)"
+                + (f", {len(selected_routes)} route(s)" if selected_routes else "")
+                + "…"
+            ):
+                er = export_gtfs_subset(
+                    slug,
+                    dates=dates,
+                    route_ids=selected_routes or None,
+                )
+
+            if er.success:
+                st.success(
+                    f"Subset exported — {len(er.files_included)} files · "
+                    f"{er.total_records} records."
+                )
+                for w in er.warnings:
+                    st.caption(f"• {w}")
+            else:
+                st.error("Subset export failed.")
+                for e in er.errors:
+                    st.caption(f"• {e}")
+
 
 def _render_export_section(project_slug: str) -> None:
     """Render the export UI with pre-checks, button, and results."""
@@ -468,6 +653,9 @@ def _render_export_section(project_slug: str) -> None:
             for e in er.errors:
                 st.caption(f"• {e}")
 
+    # ── Subset export (date / route slice via gtfs-kit) ──────────────────
+    _render_subset_export(project_slug)
+
     # Export history
     exports = list_exports(project_slug)
     if exports:
@@ -479,9 +667,15 @@ def _render_export_section(project_slug: str) -> None:
         for i, exp in enumerate(exports[:10]):
             c_info, c_btn = st.columns([4, 1])
             with c_info:
+                subset_tag = (
+                    f" <span style='background:{BLUE_ACCENT}33;color:{BLUE_ACCENT};"
+                    f"border:1px solid {BLUE_ACCENT};padding:0.05rem 0.4rem;"
+                    f"border-radius:8px;font-size:0.7rem;font-weight:600;'>subset</span>"
+                    if exp.get("is_subset") else ""
+                )
                 st.markdown(
                     f"<div style='color:{TEXT_PRIMARY};font-size:0.88rem;'>"
-                    f"<code>{exp['filename']}</code> · "
+                    f"<code>{exp['filename']}</code>{subset_tag} · "
                     f"<span style='color:{TEXT_MUTED};'>"
                     f"{_fmt_bytes(exp['size_bytes'])} · "
                     f"{_fmt_ts(exp['created_at'])}</span></div>",
@@ -606,6 +800,125 @@ if not database_exists(project_slug):
 st.subheader("Feed Completeness")
 _render_completeness_gauge(project_slug)
 
+st.markdown("---")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 1d: Feed Analytics & Network Map (powered by gtfs-kit)
+# ═══════════════════════════════════════════════════════════════════════════
+
+@st.cache_resource(show_spinner=False)
+def _cached_feed(slug: str, sig: tuple):
+    """Cache the gtfs-kit Feed, keyed on (db path, mtime)."""
+    del sig  # used only to invalidate the cache when the DB changes
+    return feed_from_db(slug)
+
+
+def _render_analytics_and_map(slug: str) -> None:
+    st.subheader("Feed Analytics & Network Map")
+
+    if not GTFS_KIT_AVAILABLE:
+        st.info("`gtfs-kit` is not installed — run `uv sync` to enable feed analytics.")
+        return
+
+    sig = db_signature(slug)
+    if sig is None:
+        st.info("Create the GTFS database above to enable analytics.")
+        return
+
+    feed = _cached_feed(slug, sig)
+    analytics = compute_analytics(feed)
+
+    if not analytics.available:
+        st.info(
+            "Feed analytics need at least agency, stops, routes, and trips "
+            "to have records. Populate them via mapping or direct upload."
+        )
+        return
+
+    # ── Summary metrics ──────────────────────────────────────────────────
+    ind = analytics.indicators
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Routes", int(ind.get("num_routes", 0)))
+    m2.metric("Trips", int(ind.get("num_trips", 0)))
+    m3.metric("Stops", int(ind.get("num_stops", 0)))
+    m4.metric("Shapes", int(ind.get("num_shapes", 0)))
+
+    if analytics.service_start and analytics.service_end:
+        st.caption(
+            f"Service span: **{analytics.service_start} → {analytics.service_end}** "
+            f"· {analytics.num_active_dates} active date(s)"
+            + (
+                f" · Busiest date: **{analytics.busiest_date}** "
+                f"({analytics.busiest_date_trips} trips)"
+                if analytics.busiest_date else ""
+            )
+        )
+
+    # ── Health indicators ────────────────────────────────────────────────
+    health_rows = []
+    for key, label in [
+        ("num_trips_missing_shapes",          "Trips missing shapes"),
+        ("num_stops_without_trips",           "Stops with no trips"),
+        ("num_routes_without_trips",          "Routes with no trips"),
+        ("num_stop_times_with_no_departure", "Stop times missing departure"),
+        ("num_stop_times_with_no_arrival",   "Stop times missing arrival"),
+    ]:
+        if key in ind:
+            val = int(ind[key])
+            if val > 0:
+                health_rows.append((label, val))
+
+    if health_rows:
+        with st.expander(f"{len(health_rows)} health indicator(s) to review", expanded=False):
+            for label, val in health_rows:
+                st.markdown(
+                    f"<div style='color:{WARNING};font-size:0.88rem;'>⚠ {label}: "
+                    f"<strong>{val}</strong></div>",
+                    unsafe_allow_html=True,
+                )
+
+    # ── Route stats ──────────────────────────────────────────────────────
+    if analytics.route_stats is not None and not analytics.route_stats.empty:
+        with st.expander("Per-route stats (first service day)", expanded=False):
+            rs = analytics.route_stats
+            display_cols = [
+                c for c in [
+                    "route_id", "route_short_name", "num_trips",
+                    "mean_headway", "service_duration", "service_distance",
+                    "service_speed",
+                ]
+                if c in rs.columns
+            ]
+            st.dataframe(rs[display_cols], use_container_width=True, hide_index=True)
+
+    # ── Network map ──────────────────────────────────────────────────────
+    st.markdown(
+        f"<div style='color:{TEXT_SECONDARY};font-size:0.9rem;margin-top:0.6rem;'>"
+        "Network map — routes are drawn from <code>shapes.txt</code> when available, "
+        "otherwise from straight lines between consecutive stops.</div>",
+        unsafe_allow_html=True,
+    )
+
+    map_col1, map_col2 = st.columns([3, 1])
+    with map_col2:
+        show_stops = st.checkbox("Overlay stops", value=False, key="map_show_stops")
+        show_map = st.checkbox("Render map", value=False, key="map_render_toggle")
+
+    if show_map:
+        with st.spinner("Building map…"):
+            fmap = build_routes_map(feed, show_stops=show_stops)
+        if fmap is None:
+            st.warning("Could not build the map (feed likely missing shapes/coordinates).")
+        else:
+            try:
+                from streamlit_folium import st_folium
+                st_folium(fmap, height=500, use_container_width=True, returned_objects=[])
+            except ImportError:
+                st.components.v1.html(fmap._repr_html_(), height=500, scrolling=False)
+
+
+_render_analytics_and_map(project_slug)
 st.markdown("---")
 
 
