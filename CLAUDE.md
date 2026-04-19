@@ -8,8 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Install dependencies
 uv sync
 
-# Run the admin UI (opens at http://localhost:8501)
-uv run streamlit run admin_ui.py
+# Run the app (opens at http://localhost:8501)
+uv run streamlit run app.py
 
 # Run all tests
 uv run pytest
@@ -23,7 +23,18 @@ uv run pytest tests/test_storage_layers.py::TestCreateProject
 
 ## Architecture
 
-This is a configurable data ingestion and processing pipeline for public transit system data, implementing a **Bronze → Silver → Gold data lake architecture** with a Streamlit admin UI.
+This is a configurable data ingestion and processing pipeline for public transit system data, implementing a **Bronze → Silver → Gold data lake architecture** with a multipage Streamlit UI.
+
+### Multipage Structure
+
+The app uses `st.navigation()` with two modules:
+
+| Entry Point | Description |
+|---|---|
+| `app.py` | Main entry point — sidebar navigation, theme injection |
+| `pages/1_ml_data_pipeline.py` | Module 1 — ML Data Preparation |
+| `pages/2_gtfs_pipeline.py` | Module 2 — GTFS Data Maturity Pipeline |
+| `admin_ui.py` | Legacy wrapper — delegates to `app.py` |
 
 ### Data Flow
 
@@ -47,8 +58,13 @@ Both modes support optional Weather Observations and Calendar Events. A **qualit
 
 | File | Role |
 |---|---|
-| `admin_ui.py` | Streamlit web app — project management, file uploads, mode building |
+| `app.py` | Main entry point — multipage navigation, theme injection |
+| `pages/1_ml_data_pipeline.py` | Module 1 UI — project management, file uploads, mode building |
+| `pages/2_gtfs_pipeline.py` | Module 2 UI — GTFS data maturity pipeline |
+| `admin_ui.py` | Legacy wrapper — delegates to `app.py` |
+| `ui_theme.py` | Shared CSS theme, color tokens, logo component |
 | `schemas.py` | Pydantic models for all 12 ingestion schemas and 2 Gold output schemas |
+| `gtfs_schemas.py` | Pydantic models for 15 GTFS/GTFS-ride tables + enums |
 | `ingestion_tabular.py` | CSV/Excel parsing, column normalization, row-by-row validation |
 | `ingestion_geo.py` | Shapefile/GeoJSON reading, geometry validation, GeoParquet output |
 | `storage_layers.py` | Project/run CRUD, Bronze/Silver/Gold directory creation, lineage tracking |
@@ -62,4 +78,9 @@ Fleet Identification, Fleet Energy Performance, Electric Fleet Characteristics, 
 
 ### Testing
 
-Tests are in `tests/test_storage_layers.py` and use an `isolated_data_lake` pytest fixture to avoid touching the real filesystem. Test classes cover safe slug generation, project idempotency, run creation, and lineage retrieval.
+Tests are in `tests/` and use an `isolated_data_lake` pytest fixture to avoid touching the real filesystem.
+
+| Test File | Coverage |
+|---|---|
+| `tests/test_storage_layers.py` | Project CRUD, run creation, lineage |
+| `tests/test_gtfs_schemas.py` | All 15 GTFS Pydantic models, enums, format validation |

@@ -31,10 +31,10 @@ uv sync
 
 ## Run the Streamlit app
 
-Start the admin UI:
+Start the multipage app:
 
 ```bash
-uv run streamlit run admin_ui.py
+uv run streamlit run app.py
 ```
 
 `uv run` uses the project’s virtual environment and dependencies, so you don’t need to activate the venv manually.
@@ -42,8 +42,10 @@ uv run streamlit run admin_ui.py
 Or, after activating the environment (e.g. `source .venv/bin/activate` on Linux/macOS):
 
 ```bash
-streamlit run admin_ui.py
+streamlit run app.py
 ```
+
+The legacy command `streamlit run admin_ui.py` also works (it delegates to `app.py`).
 
 The app will open in your browser (default: http://localhost:8501).
 
