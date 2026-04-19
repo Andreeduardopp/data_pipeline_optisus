@@ -15,7 +15,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import patch
 
-from gtfs_database import (
+from optisus.core.gtfs.database import (
     create_gtfs_database,
     get_gtfs_db_path,
     get_connection,
@@ -37,7 +37,7 @@ from gtfs_database import (
 @pytest.fixture()
 def isolated_gtfs_db(tmp_path, monkeypatch):
     """Redirect PROJECTS_ROOT to a temp directory and create a test project."""
-    import gtfs_database
+    from optisus.core.gtfs import database as gtfs_database
     monkeypatch.setattr(gtfs_database, "PROJECTS_ROOT", tmp_path / "projects")
     # Also patch storage_layers import used inside gtfs_database
     project_dir = tmp_path / "projects" / "test_project"
@@ -351,7 +351,7 @@ class TestTableColumns:
         assert "arrival_time" in cols
 
     def test_all_gtfs_tables_have_columns(self):
-        from gtfs_schemas import GTFS_TABLE_MODELS
+        from optisus.core.schemas.gtfs import GTFS_TABLE_MODELS
         for tbl in GTFS_TABLE_MODELS:
             cols = get_table_columns(tbl)
             assert len(cols) > 0, f"Table {tbl} has no columns"

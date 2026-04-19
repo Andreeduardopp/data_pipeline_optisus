@@ -19,8 +19,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import ValidationError
 
-from gtfs_schemas import GTFS_TABLE_MODELS
-from storage_layers import PROJECTS_ROOT
+from optisus.core.schemas.gtfs import GTFS_TABLE_MODELS
+from optisus.core.storage.layers import PROJECTS_ROOT
 
 logger = logging.getLogger(__name__)
 

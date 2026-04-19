@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Tuple
 import geopandas as gpd
 from pydantic import ValidationError
 
-from schemas import GeographicData
+from optisus.core.schemas.ingestion import GeographicData
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")

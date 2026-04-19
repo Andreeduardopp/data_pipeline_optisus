@@ -20,7 +20,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from gtfs_database import (
+from optisus.core.gtfs.database import (
     check_integrity,
     clear_table,
     create_gtfs_database,
@@ -32,7 +32,7 @@ from gtfs_database import (
     get_table_records,
     upsert_records,
 )
-from gtfs_exporter import (
+from optisus.core.gtfs.exporter import (
     compute_feed_completeness,
     export_gtfs_feed,
     export_gtfs_subset,
@@ -41,25 +41,25 @@ from gtfs_exporter import (
     validate_before_export,
     validate_latest_export,
 )
-from gtfs_kit_bridge import (
+from optisus.core.gtfs.analytics import (
     GTFS_KIT_AVAILABLE,
     build_routes_map,
     compute_analytics,
     db_signature,
     feed_from_db,
 )
-from gtfs_mapper import (
+from optisus.core.gtfs.mapper import (
     _SCHEMA_TO_MAPPER,
     _ALL_GTFS_TABLES,
     map_project_to_gtfs,
 )
-from storage_layers import (
+from optisus.core.storage.layers import (
     PROJECTS_ROOT,
     get_project_silver_datasets,
     list_project_runs,
     list_projects,
 )
-from ui_theme import (
+from optisus.ui.theme import (
     BORDER_DEFAULT,
     ERROR,
     LIGHT_ACCENT,

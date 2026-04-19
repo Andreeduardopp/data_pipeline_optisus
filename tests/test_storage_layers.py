@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from storage_layers import (
+from optisus.core.storage.layers import (
     _safe_name,
     create_project,
     list_projects,
@@ -21,8 +21,8 @@ def isolated_data_lake(tmp_path, monkeypatch):
     """Redirect DATA_LAKE_ROOT and PROJECTS_ROOT to a temp directory for every test."""
     fake_root = tmp_path / "data_lake_outputs"
     fake_projects = fake_root / "projects"
-    monkeypatch.setattr("storage_layers.DATA_LAKE_ROOT", fake_root)
-    monkeypatch.setattr("storage_layers.PROJECTS_ROOT", fake_projects)
+    monkeypatch.setattr("optisus.core.storage.layers.DATA_LAKE_ROOT", fake_root)
+    monkeypatch.setattr("optisus.core.storage.layers.PROJECTS_ROOT", fake_projects)
     return fake_root
 
 

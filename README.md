@@ -1,6 +1,13 @@
 # Data Pipeline Optisus
 
-This project aims to provide a configurable ingestion pipeline for tabular and spatial data, with schema-based validation and a Bronze → Silver → Gold storage model. The codebase is organized around a Streamlit admin UI (`admin_ui.py`) for uploads and validation; ingestion logic for tabular and geo data (`ingestion_tabular.py`, `ingestion_geo.py`); schema and validation rules (`schemas.py`, `ui_validation.py`); and layered persistence and lineage (`storage_layers.py`, `mlops_storage.py`).
+This project provides a configurable ingestion pipeline for tabular and spatial transit data, with schema-based validation, a Bronze → Silver → Gold storage model, and a complete GTFS maturity pipeline (mapping, SQLite persistence, spec validation, analytics, and feed export).
+
+The codebase is packaged under `src/optisus/` with a clean **core vs. ui** split:
+
+- `optisus.core.*` — pure Python (no Streamlit): schemas, ingestion, storage, ML mode builders, MLOps feature store, GTFS (database, mapper, exporter, validator, gtfs-kit analytics bridge). Reusable from scripts, notebooks, or tests.
+- `optisus.ui.*` — Streamlit layer: app entry, theme, and two pages (`ml_pipeline`, `gtfs_pipeline`).
+
+Root-level `app.py` and `admin_ui.py` are thin bootstraps that call `optisus.ui.app.main()`.
 
 ## Prerequisites
 
@@ -21,13 +28,7 @@ From the project root:
 uv sync
 ```
 
-This creates a virtual environment (if needed), installs the project and its dependencies from `pyproject.toml`, and uses the lockfile `uv.lock` for reproducible installs.
-
-To add the project in editable mode and ensure the CLI is available:
-
-```bash
-uv sync
-```
+This creates a virtual environment (if needed), installs the project and its dependencies from `pyproject.toml`, and uses the lockfile `uv.lock` for reproducible installs. The project is installed in editable mode via the hatchling build backend (see `[tool.hatch.build.targets.wheel]` in `pyproject.toml`), so edits under `src/optisus/` are picked up automatically.
 
 ## Run the Streamlit app
 
@@ -113,6 +114,26 @@ data_lake_outputs/
 
 Legacy runs created before the project feature (`data_lake_outputs/run_id_*`)
 remain on disk but are not shown in the UI.
+
+## Programmatic (non-UI) usage
+
+Because `optisus.core` has no Streamlit dependency, you can drive the pipeline from a script or notebook:
+
+```python
+from optisus.core.storage.layers import create_project, list_projects
+from optisus.core.gtfs.mapper import map_project_to_gtfs
+from optisus.core.gtfs.exporter import export_gtfs_feed, export_gtfs_subset
+from optisus.core.gtfs.validator import validate_gtfs_feed
+from optisus.core.gtfs.analytics import feed_from_db, compute_analytics
+
+slug = create_project("Demo City")
+map_project_to_gtfs(slug)                   # Silver → SQLite
+result = export_gtfs_feed(slug)             # writes exports/latest/gtfs.zip
+report = validate_gtfs_feed(result.zip_path)
+
+feed = feed_from_db(slug)                   # gtfs-kit Feed, no ZIP round-trip
+stats = compute_analytics(feed)
+```
 
 ## Running tests
 

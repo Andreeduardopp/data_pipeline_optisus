@@ -27,7 +27,7 @@ except ImportError:
     gk = None
     GTFS_KIT_AVAILABLE = False
 
-from gtfs_database import get_connection, get_gtfs_db_path
+from optisus.core.gtfs.database import get_connection, get_gtfs_db_path
 
 logger = logging.getLogger(__name__)
 

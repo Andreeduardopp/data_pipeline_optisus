@@ -216,7 +216,7 @@ def validate_tabular_for_ui(
     - row_errors: list of (row_index_1based, error_message) for invalid rows.
     - clean_df: validated DataFrame (only valid rows); None if read error or mandatory columns missing.
     """
-    from ui_validation import get_default_required_fields
+    from optisus.core.schemas.metadata import get_default_required_fields
 
     df, read_err = read_tabular_for_preview(file_path)
     if read_err:

@@ -16,7 +16,7 @@ Covers:
 import pytest
 from pydantic import ValidationError
 
-from gtfs_schemas import (
+from optisus.core.schemas.gtfs import (
     # Enums
     LocationType,
     RouteType,

@@ -16,8 +16,8 @@ from pathlib import Path
 
 import pytest
 
-from gtfs_database import create_gtfs_database, upsert_records, get_connection
-from gtfs_exporter import (
+from optisus.core.gtfs.database import create_gtfs_database, upsert_records, get_connection
+from optisus.core.gtfs.exporter import (
     validate_before_export,
     compute_feed_completeness,
     export_gtfs_feed,
@@ -30,8 +30,8 @@ from gtfs_exporter import (
 @pytest.fixture()
 def isolated_gtfs(tmp_path, monkeypatch):
     """Redirect PROJECTS_ROOT to temp dir and create a test project."""
-    import gtfs_database
-    import gtfs_exporter
+    from optisus.core.gtfs import database as gtfs_database
+    from optisus.core.gtfs import exporter as gtfs_exporter
     projects = tmp_path / "projects"
     monkeypatch.setattr(gtfs_database, "PROJECTS_ROOT", projects)
     monkeypatch.setattr(gtfs_exporter, "PROJECTS_ROOT", projects)

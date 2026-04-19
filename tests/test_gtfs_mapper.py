@@ -8,7 +8,7 @@ Silver schemas but are in CSV format — the mapper can read both).
 import pytest
 from pathlib import Path
 
-from gtfs_mapper import (
+from optisus.core.gtfs.mapper import (
     # ID generation
     generate_trip_id,
     generate_service_id,
@@ -30,7 +30,7 @@ from gtfs_mapper import (
     _seconds_to_time_str,
     MappingReport,
 )
-from gtfs_database import (
+from optisus.core.gtfs.database import (
     create_gtfs_database,
     get_table_count,
     get_table_records,
@@ -215,8 +215,8 @@ class TestMapAgency:
 @pytest.fixture()
 def isolated_project(tmp_path, monkeypatch):
     """Set up an isolated project with sample data as Silver datasets."""
-    import gtfs_database
-    import gtfs_mapper
+    from optisus.core.gtfs import database as gtfs_database
+    from optisus.core.gtfs import mapper as gtfs_mapper  # noqa: F401
     monkeypatch.setattr(gtfs_database, "PROJECTS_ROOT", tmp_path / "projects")
     # Also need to patch the storage_layers import inside gtfs_mapper
     # so get_project_silver_datasets works

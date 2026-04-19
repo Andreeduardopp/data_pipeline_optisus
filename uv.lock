@@ -183,7 +183,7 @@ wheels = [
 [[package]]
 name = "data-pipeline-optisus"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "geopandas" },
     { name = "gtfs-kit" },

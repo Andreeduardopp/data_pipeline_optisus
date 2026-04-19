@@ -16,21 +16,21 @@ from typing import Dict
 import pandas as pd
 import pytest
 
-from gtfs_database import (
+from optisus.core.gtfs.database import (
     check_integrity,
     create_gtfs_database,
     get_connection,
     get_table_count,
     upsert_records,
 )
-from gtfs_exporter import (
+from optisus.core.gtfs.exporter import (
     export_gtfs_feed,
     list_exports,
     validate_before_export,
 )
-from gtfs_mapper import map_project_to_gtfs
-from gtfs_validator import validate_gtfs_feed
-from storage_layers import create_project
+from optisus.core.gtfs.mapper import map_project_to_gtfs
+from optisus.core.gtfs.validator import validate_gtfs_feed
+from optisus.core.storage.layers import create_project
 
 
 SAMPLES = Path(__file__).parent.parent / "samples"
@@ -43,9 +43,9 @@ SAMPLES = Path(__file__).parent.parent / "samples"
 @pytest.fixture()
 def isolated_data_lake(tmp_path, monkeypatch):
     """Redirect all storage roots to a temp directory."""
-    import gtfs_database
-    import gtfs_exporter
-    import storage_layers
+    from optisus.core.gtfs import database as gtfs_database
+    from optisus.core.gtfs import exporter as gtfs_exporter
+    from optisus.core.storage import layers as storage_layers
 
     fake_root = tmp_path / "data_lake_outputs"
     fake_projects = fake_root / "projects"
@@ -259,7 +259,7 @@ class TestIntegrityViolations:
         ])
 
         # Force an orphaned FK by bypassing foreign-key enforcement
-        from gtfs_database import get_gtfs_db_path
+        from optisus.core.gtfs.database import get_gtfs_db_path
         conn = sqlite3.connect(str(get_gtfs_db_path(slug)))
         conn.execute("PRAGMA foreign_keys = OFF")
         conn.execute(

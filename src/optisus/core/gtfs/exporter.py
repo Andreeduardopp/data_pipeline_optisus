@@ -19,15 +19,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from gtfs_database import (
+from optisus.core.gtfs.database import (
     get_connection,
     get_gtfs_db_path,
     get_table_columns,
     get_table_count,
     GTFS_DB_FILENAME,
 )
-from gtfs_validator import GtfsValidationReport, validate_gtfs_feed
-from storage_layers import PROJECTS_ROOT
+from optisus.core.gtfs.validator import GtfsValidationReport, validate_gtfs_feed
+from optisus.core.storage.layers import PROJECTS_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -352,7 +352,7 @@ def export_gtfs_subset(
 
     # Lazy import to avoid hard-coupling when gtfs-kit isn't installed
     try:
-        from gtfs_kit_bridge import GTFS_KIT_AVAILABLE, feed_from_db
+        from optisus.core.gtfs.analytics import GTFS_KIT_AVAILABLE, feed_from_db
     except ImportError:
         result.errors.append("gtfs-kit bridge not available.")
         return result

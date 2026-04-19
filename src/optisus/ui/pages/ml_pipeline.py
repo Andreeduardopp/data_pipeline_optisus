@@ -12,7 +12,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from ui_validation import (
+from optisus.core.schemas.metadata import (
     TABULAR_SCHEMAS,
     get_default_required_fields,
     get_all_field_names,
@@ -22,9 +22,9 @@ from ui_validation import (
     MODE_DESCRIPTIONS,
     get_mode_dataset_checklist,
 )
-from ingestion_tabular import read_tabular_for_preview, validate_tabular_for_ui
-from ingestion_geo import read_spatial_for_preview, validate_spatial_data
-from storage_layers import (
+from optisus.core.ingestion.tabular import read_tabular_for_preview, validate_tabular_for_ui
+from optisus.core.ingestion.geospatial import read_spatial_for_preview, validate_spatial_data
+from optisus.core.storage.layers import (
     create_project,
     list_projects,
     list_project_runs,
@@ -39,7 +39,7 @@ from storage_layers import (
     save_gold_metrics,
     write_layer_lineage,
 )
-from mode_builders import (
+from optisus.core.ml.mode_builders import (
     evaluate_quality_gate,
     build_mode_a_artifacts,
     build_mode_b_artifacts,

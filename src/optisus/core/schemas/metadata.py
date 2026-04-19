@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 # Tabular schema models only (exclude GeographicData, which is for JSON config)
 # Gold-layer output schemas are also excluded — they validate pipeline output, not uploads.
-from schemas import (
+from optisus.core.schemas.ingestion import (
     FleetIdentification,
     FleetEnergyPerformance,
     ElectricFleetCharacteristics,
