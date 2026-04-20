@@ -17,6 +17,7 @@ from optisus.ui.theme import inject_custom_css, render_logo_header
 # hashing behaviour stable across reruns.
 _ML_PAGE_PATH = "src/optisus/ui/pages/ml_pipeline.py"
 _GTFS_PAGE_PATH = "src/optisus/ui/pages/gtfs_pipeline.py"
+_DB_OVERVIEW_PAGE_PATH = "src/optisus/ui/pages/db_overview.py"
 
 
 def main() -> None:
@@ -44,6 +45,11 @@ def main() -> None:
         title="GTFS Data Maturity",
         icon="🚌",
     )
+    db_overview_page = st.Page(
+        _DB_OVERVIEW_PAGE_PATH,
+        title="Database Overview",
+        icon="🗄️",
+    )
 
-    nav = st.navigation({"Modules": [ml_page, gtfs_page]})
+    nav = st.navigation({"Modules": [ml_page, gtfs_page, db_overview_page]})
     nav.run()

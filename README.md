@@ -1,13 +1,32 @@
 # Data Pipeline Optisus
 
-This project provides a configurable ingestion pipeline for tabular and spatial transit data, with schema-based validation, a Bronze → Silver → Gold storage model, and a complete GTFS maturity pipeline (mapping, SQLite persistence, spec validation, analytics, and feed export).
+This project provides a configurable ingestion pipeline for tabular and spatial transit data, with schema-based validation, a Bronze → Silver → Gold storage model, and a complete GTFS maturity pipeline (mapping, `.zip` ingestion, SQLite persistence, spec validation, analytics, and feed export).
 
 The codebase is packaged under `src/optisus/` with a clean **core vs. ui** split:
 
-- `optisus.core.*` — pure Python (no Streamlit): schemas, ingestion, storage, ML mode builders, MLOps feature store, GTFS (database, mapper, exporter, validator, gtfs-kit analytics bridge). Reusable from scripts, notebooks, or tests.
+- `optisus.core.*` — pure Python (no Streamlit): schemas, ingestion, storage, ML mode builders, MLOps feature store, GTFS (database, mapper, importer, exporter, validator, gtfs-kit analytics bridge). Reusable from scripts, notebooks, or tests.
 - `optisus.ui.*` — Streamlit layer: app entry, theme, and two pages (`ml_pipeline`, `gtfs_pipeline`).
 
 Root-level `app.py` and `admin_ui.py` are thin bootstraps that call `optisus.ui.app.main()`.
+
+## Package layout
+
+```
+src/optisus/
+├── core/                      # pure Python, no streamlit imports
+│   ├── schemas/               # ingestion + GTFS Pydantic models, lineage metadata
+│   ├── ingestion/             # tabular (CSV/Excel) + geospatial (Shapefile/GeoJSON)
+│   ├── storage/               # project/run CRUD, Bronze/Silver/Gold layout
+│   ├── ml/                    # Mode A / Mode B Gold artifact builders
+│   ├── mlops/                 # versioned feature store, audit logging
+│   └── gtfs/                  # database, mapper, importer, exporter, validator, analytics
+└── ui/                        # streamlit layer
+    ├── app.py                 # main() — sidebar, theme, st.navigation
+    ├── theme.py               # shared CSS, color tokens, logo
+    └── pages/
+        ├── ml_pipeline.py     # Module 1 — ML Data Preparation
+        └── gtfs_pipeline.py   # Module 2 — GTFS Data Maturity
+```
 
 ## Prerequisites
 
@@ -38,7 +57,7 @@ Start the multipage app:
 uv run streamlit run app.py
 ```
 
-`uv run` uses the project’s virtual environment and dependencies, so you don’t need to activate the venv manually.
+`uv run` uses the project's virtual environment and dependencies, so you don't need to activate the venv manually.
 
 Or, after activating the environment (e.g. `source .venv/bin/activate` on Linux/macOS):
 
@@ -51,6 +70,13 @@ The legacy command `streamlit run admin_ui.py` also works (it delegates to `app.
 The app will open in your browser (default: http://localhost:8501).
 
 ## How it works
+
+The app is a multipage Streamlit application with two modules selectable from the sidebar:
+
+| Module | Purpose |
+|---|---|
+| **Module 1 — ML Data Preparation** (`ml_pipeline`) | Project management, tabular/spatial uploads, Bronze→Silver→Gold runs, dual-mode forecasting builds |
+| **Module 2 — GTFS Data Maturity** (`gtfs_pipeline`) | Map Silver datasets to GTFS, ingest existing GTFS feeds, browse/edit tables, validate, export, visualize |
 
 ### Projects
 
@@ -90,6 +116,34 @@ to be provided.
    engineering, validates each output row against the Gold-layer Pydantic
    schema, and writes the result into a new versioned Gold run.
 
+### GTFS Data Maturity module
+
+Module 2 gives each project a dedicated SQLite GTFS database
+(`projects/<slug>/gtfs.db`) with FK constraints enforcing referential
+integrity across the 15 canonical GTFS / GTFS-ride tables. The page
+surfaces:
+
+1. **Database status bar** — existence, size, table counts.
+2. **Maturity dashboard** — progression across levels (schema coverage,
+   referential integrity, spec validation, gtfs-kit quality tags).
+3. **Feed completeness gauge** — scored coverage of required vs. optional
+   tables.
+4. **GTFS table browser** — paginated view/edit of each table.
+5. **Direct GTFS upload** — drop an existing agency/vendor `.zip` feed,
+   preview its contents, and ingest in one of three modes:
+   - `REPLACE` — wipe the DB and load from the zip.
+   - `MERGE` — upsert into the existing DB.
+   - `ABORT_IF_NOT_EMPTY` — safe mode; refuses to write if any table has rows.
+   The importer streams every member through `ZipFile.open`, enforces
+   size / zip-bomb guards, and reuses the same row-validation + SQL upsert
+   path as the Silver → GTFS mapper.
+6. **Silver → GTFS mapping wizard** — map validated Silver datasets onto
+   GTFS tables without needing an existing feed.
+7. **Integrity report** — FK and structural checks.
+8. **Export & validate** — produce a full-feed `.zip` (`exports/latest/gtfs.zip`)
+   or date-/route-filtered subset exports (`exports/<timestamp>/`), plus
+   analytics and Folium route/stop maps via the gtfs-kit bridge.
+
 ### Storage layout
 
 ```
@@ -97,13 +151,17 @@ data_lake_outputs/
 └── projects/
     └── <project_slug>/
         ├── project.json
+        ├── gtfs.db                         # per-project GTFS SQLite DB
+        ├── exports/                        # GTFS zip exports
+        │   ├── latest/gtfs.zip
+        │   └── <timestamp>/gtfs.zip        # subset exports
         └── runs/
-            ├── run_id_<ts>_<schema>/        # per-upload runs
-            │   ├── bronze/                  # raw uploaded files
-            │   ├── silver/                  # validated Parquet / reports
-            │   ├── gold/                    # aggregate metrics
+            ├── run_id_<ts>_<schema>/       # per-upload runs
+            │   ├── bronze/                 # raw uploaded files
+            │   ├── silver/                 # validated Parquet / reports
+            │   ├── gold/                   # aggregate metrics
             │   └── lineage.json
-            └── run_id_<ts>_mode_a_build/    # mode build runs
+            └── run_id_<ts>_mode_a_build/   # mode build runs
                 ├── gold/
                 │   ├── mode_a_timeseries.parquet
                 │   ├── mode_a_economic_context.parquet
@@ -122,10 +180,10 @@ Because `optisus.core` has no Streamlit dependency, you can drive the pipeline f
 ```python
 from optisus.core.storage.layers import create_project, list_projects
 from optisus.core.gtfs.mapper import map_project_to_gtfs
-from optisus.core.gtfs.importer import import_gtfs_zip, ImportMode
+from optisus.core.gtfs.importer import import_gtfs_zip, preview_gtfs_zip, ImportMode
 from optisus.core.gtfs.exporter import export_gtfs_feed, export_gtfs_subset
 from optisus.core.gtfs.validator import validate_gtfs_feed
-from optisus.core.gtfs.analytics import feed_from_db, compute_analytics
+from optisus.core.gtfs.analytics import feed_from_db, compute_analytics, build_routes_map
 
 slug = create_project("Demo City")
 
@@ -133,13 +191,16 @@ slug = create_project("Demo City")
 map_project_to_gtfs(slug)
 
 # Option B — ingest an existing GTFS .zip (agency feed, vendor export, …)
+preview = preview_gtfs_zip("path/to/feed.zip")          # inspect before committing
 import_gtfs_zip(slug, "path/to/feed.zip", mode=ImportMode.REPLACE)
 
-result = export_gtfs_feed(slug)             # writes exports/latest/gtfs.zip
+result = export_gtfs_feed(slug)                         # exports/latest/gtfs.zip
+subset = export_gtfs_subset(slug, dates=["20260501"])   # exports/<timestamp>/gtfs.zip
 report = validate_gtfs_feed(result.zip_path)
 
-feed = feed_from_db(slug)                   # gtfs-kit Feed, no ZIP round-trip
+feed = feed_from_db(slug)                               # gtfs-kit Feed, no ZIP round-trip
 stats = compute_analytics(feed)
+routes_map = build_routes_map(feed)                     # Folium map
 ```
 
 ## Running tests
@@ -147,3 +208,11 @@ stats = compute_analytics(feed)
 ```bash
 uv run pytest
 ```
+
+Tests use an `isolated_data_lake` / `isolated_gtfs` pytest fixture that
+redirects `DATA_LAKE_ROOT` / `PROJECTS_ROOT` to `tmp_path`, so the real
+filesystem is never touched. Coverage includes storage layers, all GTFS
+Pydantic schemas, the SQLite database layer, the Silver → GTFS mapper,
+the GTFS `.zip` importer (preview, modes, FK order, zip-bomb guards,
+round-trip), the exporter (full + subset), and an end-to-end integration
+test from sample files through Silver, DB, zip export, and the validator.
