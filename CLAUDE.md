@@ -48,6 +48,7 @@ src/optisus/
 │   └── gtfs/
 │       ├── database.py        # SQLite GTFS database layer
 │       ├── mapper.py          # Silver → GTFS mapping orchestrator
+│       ├── importer.py        # GTFS .zip → SQLite ingestion
 │       ├── exporter.py        # GTFS .zip export + subset exports
 │       ├── validator.py       # spec-rule GTFS validator (authoritative)
 │       └── analytics.py       # gtfs-kit bridge — feed analytics + maps
@@ -97,6 +98,7 @@ Both modes support optional Weather Observations and Calendar Events. A **qualit
 ### GTFS pipeline
 
 - Silver datasets are mapped to the 15 canonical GTFS/GTFS-ride tables via `core.gtfs.mapper`.
+- An existing GTFS `.zip` feed can be ingested directly via `core.gtfs.importer` (`preview_gtfs_zip`, `import_gtfs_zip`) with REPLACE / MERGE / ABORT_IF_NOT_EMPTY modes. The importer streams every member through `ZipFile.open`, enforces size / zip-bomb guards, and delegates row validation and SQL upserts to the same `upsert_records` used by the Silver mapper.
 - Records are persisted to SQLite via `core.gtfs.database` with Pydantic validation.
 - `core.gtfs.validator` runs spec-rule checks (the authoritative validator).
 - `core.gtfs.exporter` produces full-feed `.zip` exports under `exports/latest/` plus date- and route-filtered subset exports (via gtfs-kit's `restrict_to_dates` / `restrict_to_routes`) under `exports/<timestamp>/`.
@@ -117,6 +119,7 @@ Tests live in `tests/` and use an `isolated_data_lake` (or `isolated_gtfs`) pyte
 | `tests/test_gtfs_database.py` | SQLite layer — upsert, FK integrity, CRUD, summary |
 | `tests/test_gtfs_mapper.py` | Silver → GTFS mapping (per-table + orchestrator) |
 | `tests/test_gtfs_exporter.py` | Pre-export validation, zip format, completeness score |
+| `tests/test_gtfs_importer.py` | GTFS zip preview + import (modes, FK order, guards, round-trip) |
 | `tests/test_gtfs_integration.py` | End-to-end: samples → Silver → DB → zip → validator |
 
 Fixtures that need to patch module-level globals use `from optisus.core.X import Y as alias` so `monkeypatch.setattr(alias, "FLAG", ...)` continues to work.

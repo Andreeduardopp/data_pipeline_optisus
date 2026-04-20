@@ -48,6 +48,12 @@ from optisus.core.gtfs.analytics import (
     db_signature,
     feed_from_db,
 )
+from optisus.core.gtfs.importer import (
+    GtfsImportError,
+    ImportMode,
+    import_gtfs_zip,
+    preview_gtfs_zip,
+)
 from optisus.core.gtfs.mapper import (
     _SCHEMA_TO_MAPPER,
     _ALL_GTFS_TABLES,
@@ -1018,6 +1024,154 @@ else:
             disabled=True,
             key="dl_table_csv_empty",
         )
+
+st.markdown("---")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 3a: Import complete GTFS feed (.zip)
+# ═══════════════════════════════════════════════════════════════════════════
+
+st.subheader("Import complete GTFS feed (.zip)")
+st.caption(
+    "Upload an existing GTFS archive and populate this project's database "
+    "directly. Use this when you already have a third-party feed and want to "
+    "skip the Silver → GTFS mapping step."
+)
+
+zip_file = st.file_uploader(
+    "Upload a GTFS .zip",
+    type=["zip"],
+    key="gtfs_zip_upload_file",
+)
+
+if zip_file is not None:
+    zip_bytes = zip_file.getvalue()
+    preview = preview_gtfs_zip(io.BytesIO(zip_bytes))
+
+    if preview.errors:
+        for err in preview.errors:
+            st.error(err)
+
+    if preview.missing_required:
+        missing_display = [
+            "calendar.txt or calendar_dates.txt"
+            if m == "calendar_or_calendar_dates"
+            else f"{m}.txt"
+            for m in preview.missing_required
+        ]
+        st.error(
+            "Archive is missing required GTFS files: "
+            + ", ".join(f"`{m}`" for m in missing_display)
+        )
+
+    if preview.recognised_tables:
+        st.markdown("**Recognised tables**")
+        preview_df = pd.DataFrame(
+            [
+                {"table": t, "rows": n}
+                for t, n in sorted(preview.recognised_tables.items())
+            ]
+        )
+        st.dataframe(preview_df, use_container_width=True, hide_index=True)
+
+    if preview.unknown_files:
+        with st.expander(
+            f"{len(preview.unknown_files)} unknown file(s) will be ignored"
+        ):
+            for name in preview.unknown_files:
+                st.caption(f"• `{name}`")
+
+    # Decide the default import mode based on DB state
+    summary = get_database_summary(project_slug)
+    db_has_records = bool(summary.get("exists")) and int(
+        summary.get("total_records", 0)
+    ) > 0
+
+    if db_has_records:
+        st.info(
+            f"This project's database already has "
+            f"**{summary.get('total_records', 0):,}** record(s). "
+            "Choose how to merge the uploaded feed."
+        )
+        mode_label = st.radio(
+            "Import mode",
+            options=[
+                "Replace (clear all tables, then insert)",
+                "Merge (upsert — existing PKs are overwritten)",
+                "Abort if not empty (safest)",
+            ],
+            index=0,
+            key="gtfs_zip_mode",
+        )
+        if mode_label.startswith("Replace"):
+            selected_mode = ImportMode.REPLACE
+        elif mode_label.startswith("Merge"):
+            selected_mode = ImportMode.MERGE
+        else:
+            selected_mode = ImportMode.ABORT_IF_NOT_EMPTY
+    else:
+        selected_mode = ImportMode.REPLACE
+
+    import_disabled = not preview.is_valid
+    if st.button(
+        "Import feed into database",
+        type="primary",
+        disabled=import_disabled,
+        key="btn_gtfs_zip_import",
+    ):
+        with st.spinner("Importing GTFS feed…"):
+            try:
+                result = import_gtfs_zip(
+                    project_slug,
+                    io.BytesIO(zip_bytes),
+                    mode=selected_mode,
+                )
+            except GtfsImportError as exc:
+                st.error(str(exc))
+                result = None
+
+        if result is not None:
+            c_ok, c_fail, c_time = st.columns(3)
+            c_ok.metric("Rows inserted", f"{result.total_inserted:,}")
+            c_fail.metric("Rows failed", f"{result.total_failed:,}")
+            c_time.metric("Duration (s)", result.duration_seconds)
+
+            rows = []
+            for tbl in sorted(
+                set(result.inserted_by_table) | set(result.failed_by_table)
+            ):
+                rows.append(
+                    {
+                        "table": tbl,
+                        "inserted": result.inserted_by_table.get(tbl, 0),
+                        "failed": result.failed_by_table.get(tbl, 0),
+                    }
+                )
+            if rows:
+                st.dataframe(
+                    pd.DataFrame(rows),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+            if result.cleared_tables:
+                st.caption(
+                    "Cleared before insert: "
+                    + ", ".join(f"`{t}`" for t in result.cleared_tables)
+                )
+
+            if result.errors_by_table:
+                total = sum(len(v) for v in result.errors_by_table.values())
+                with st.expander(f"{total} validation error(s)", expanded=False):
+                    for tbl, errs in result.errors_by_table.items():
+                        st.markdown(f"**{tbl}** ({len(errs)} shown)")
+                        for err in errs:
+                            st.caption(f"• {err}")
+
+            if result.total_failed == 0 and result.total_inserted > 0:
+                st.success("Import complete.")
+                st.rerun()
 
 st.markdown("---")
 

@@ -122,12 +122,19 @@ Because `optisus.core` has no Streamlit dependency, you can drive the pipeline f
 ```python
 from optisus.core.storage.layers import create_project, list_projects
 from optisus.core.gtfs.mapper import map_project_to_gtfs
+from optisus.core.gtfs.importer import import_gtfs_zip, ImportMode
 from optisus.core.gtfs.exporter import export_gtfs_feed, export_gtfs_subset
 from optisus.core.gtfs.validator import validate_gtfs_feed
 from optisus.core.gtfs.analytics import feed_from_db, compute_analytics
 
 slug = create_project("Demo City")
-map_project_to_gtfs(slug)                   # Silver → SQLite
+
+# Option A — map from your Silver datasets
+map_project_to_gtfs(slug)
+
+# Option B — ingest an existing GTFS .zip (agency feed, vendor export, …)
+import_gtfs_zip(slug, "path/to/feed.zip", mode=ImportMode.REPLACE)
+
 result = export_gtfs_feed(slug)             # writes exports/latest/gtfs.zip
 report = validate_gtfs_feed(result.zip_path)
 

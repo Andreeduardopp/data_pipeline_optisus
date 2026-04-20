@@ -537,6 +537,52 @@ def clear_table(project_slug: str, table_name: str) -> int:
         conn.close()
 
 
+# FK-safe delete order — children first, parents last.  Used by clear_all_tables
+# and by the GTFS ZIP importer's REPLACE mode.
+_CLEAR_ORDER: List[str] = [
+    "board_alight",
+    "ridership",
+    "trip_capacity",
+    "stop_times",
+    "frequencies",
+    "transfers",
+    "trips",
+    "routes",
+    "shapes",
+    "calendar_dates",
+    "calendar",
+    "stops",
+    "agency",
+    "feed_info",
+    "ride_feed_info",
+]
+
+
+def clear_all_tables(project_slug: str) -> Dict[str, int]:
+    """Delete every record from every GTFS table in FK-safe order.
+
+    Returns a mapping of table name → rows deleted.  Tables that don't exist
+    yet are silently skipped (e.g. when called on a freshly-created DB).
+    """
+    deleted: Dict[str, int] = {}
+    conn = get_connection(project_slug)
+    try:
+        for tbl in _CLEAR_ORDER:
+            try:
+                cur = conn.execute(f"DELETE FROM {tbl}")
+                deleted[tbl] = cur.rowcount
+            except sqlite3.OperationalError:
+                continue
+        conn.execute(
+            "INSERT OR REPLACE INTO _gtfs_meta (key, value) VALUES (?, ?)",
+            ("last_modified", datetime.now(timezone.utc).isoformat()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return deleted
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Integrity checks
 # ═══════════════════════════════════════════════════════════════════════════
