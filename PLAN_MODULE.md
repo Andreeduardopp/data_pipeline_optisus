@@ -1,95 +1,182 @@
-# Modularization Plan: Independent GTFS Python Packages
+# PID-GTFS — Standalone Package Plan (v2)
 
-This document outlines the theoretical decoupling of the GTFS core logic into independent, standalone Python packages. This allows other developers or projects to import only the specific functionality they need without adopting the entire pipeline structure.
+## Goal
 
----
+Extract the GTFS core from `optisus` into a single importable Python package — **PID-GTFS** (import name `pid_gtfs`) — that a user can drop into their own project and use without installing the Streamlit app or the data-lake conventions.
 
-## 1. `gtfs-models` (The Schema Module)
-**Purpose:** Provides strictly typed, native Python representation of General Transit Feed Specification structures without requiring a database.
-**Primary Use Case:** API endpoints, data ingestion gateways, or custom scripts that need to validate JSON payloads or transit entity boundaries.
+The `optisus` app keeps its current GTFS code untouched for now. PID-GTFS is a clean copy that evolves independently; no back-integration and no PyPI release in this phase.
 
-### Main Methods & Classes:
-* **Models (`GtfsAgency`, `GtfsStop`, `GtfsBoardAlight`, etc.)**: Object constructors that instantly flag missing fields, type errors, or non-compliant relationships based on Pydantic v2 schemas.
-* **`_validate_gtfs_time()`**: Parses and accepts complex transit time strings extending past midnight (e.g., `"25:35:00"`).
-* **`_validate_gtfs_date()`**: Ensures standardized `YYYYMMDD` formats.
-* **`_validate_hex_color()`**: Prevents visual anomalies by cleaning and standardizing route color strings.
+First release covers three concerns only: **schemas**, **ingestion**, and **extraction**. Validator is included (cheap, no extra deps, and an "extract without validate" API is a footgun). Analytics, mapper, and batch import are out of scope for v1.
 
 ---
 
-## 2. `gtfs-sqlite` (The Database Engine)
-**Purpose:** Houses the physical data persistence logic, handling the creation, validation, and querying of relational GTFS databases configured tightly with Foreign Key protections.
-**Primary Use Case:** Developers building local datalakes or data scientists needing a safe relational engine for complex queries.
+## 1. Scope
 
-### Main Methods & Actions:
+| Module | Source file | Lines | Role |
+|---|---|---|---|
+| Schemas | `core/schemas/gtfs.py` | 829 | 15 Pydantic models, enums, time/date/color validators |
+| DB engine | `core/gtfs/database.py` | 725 | SQLite create, upsert, query, integrity |
+| Ingestion | `core/gtfs/importer.py` | 369 | ZIP preview + import (REPLACE / MERGE / ABORT) |
+| Extraction | `core/gtfs/exporter.py` | 591 | ZIP export, subset export, completeness |
+| Validator | `core/gtfs/validator.py` | 450 | Spec-rule checks (kept to back pre-export validation) |
 
-1. **Database Initialization (`create_gtfs_database()`)**:
-   - **What it does**: This method establishes the foundational, empty database structure for your GTFS project. It acts as the initial setup, creating the necessary tables with their defined schemas, primary keys, and foreign key constraints, ready to receive GTFS data.
-   - **Input**: `project_slug` (A unique text identifier for your project, e.g., "nyc_transit_2026").
-   - **Output**: A Path object indicating the exact location on the file system where the database file (gtfs.db) was created.
-
-2. **Secure Data Import (`upsert_records()`)**:
-   - **What it does**: This is the primary mechanism for ingesting data into the GTFS tables. It intelligently handles both new record creation and updates to existing records based on their primary keys. Crucially, all incoming data is subjected to strict validation against the GTFS specification and database schema rules before being committed, ensuring data integrity and preventing the introduction of invalid entries.
-   - **Inputs**:
-     - `project_slug` (Identifies the target project database).
-     - `table_name` (The specific GTFS table to update, e.g., "stops" or "routes").
-     - `records` (A list of dictionaries, where each dictionary represents a row of data, e.g., `[{"stop_id": "1", "stop_lat": 40.7, ...}]`).
-   - **Output**: An InsertResult object, which provides a detailed receipt of the operation, including the number of records inserted, updated, failed, and a list of specific errors for any rejected rows.
-
-3. **System Health Check (`check_integrity()`)**:
-   - **What it does**: This method performs a comprehensive scan of the database to identify and report any referential integrity violations or orphaned data. It detects inconsistencies such as a trip referencing a non-existent route or a stop time referencing a non-existent stop, which are critical for maintaining a valid GTFS feed.
-   - **Input**: `project_slug` (Identifies the project database to scan).
-   - **Output**: An IntegrityReport object, providing a clear is_clean: True/False status. If False, it includes a detailed list of violations (e.g., "Trip #900 references Route #B which is missing").
-
-4. **Dashboard Metrics (`get_database_summary()`)**:
-   - **What it does**: Designed for rapid retrieval of high-level database statistics, this method provides a quick overview of the project's data status. It's optimized for user interface dashboards, allowing for immediate insights without requiring the download of large datasets.
-   - **Input**: `project_slug`.
-   - **Output**: A data dictionary summarizing the current state (e.g., `{"total_records": 45000, "table_counts": {"stops": 500}, "last_modified": "2026-04-20"}`).
-
-5. **Reading Data (`get_table_records()`)**:
-   - **What it does**: This method safely retrieves rows of data from a specified table. It supports pagination, allowing users to fetch data in manageable chunks, which is essential for working with large datasets without overwhelming system resources.
-   - **Inputs**:
-     - `project_slug`.
-     - `table_name`.
-     - `limit` & `offset` (Pagination parameters, enabling requests for specific ranges of rows, e.g., "Rows 100 to 200").
-   - **Output**: A list of dictionaries, each representing a row of data exactly as stored in the target table.
-
-6. **Safe Factory Reset (`clear_all_tables()`)**:
-   - **What it does**: This method performs a controlled and safe deletion of all data within a project's database. It is designed to respect relational dependencies, ensuring that "child" records (e.g., stop_times) are deleted before their corresponding "parent" records (e.g., trips or stops), thereby preventing database integrity errors during the cleanup process.
-   - **Input**: `project_slug`.
-   - **Output**: A dictionary serving as a deletion receipt, detailing the number of rows wiped from each specific table (e.g., `{"stop_times": 3400, "stops": 120}`).
+**Out of v1:** `analytics.py`, `mapper.py`, `batch_import.py`, `database_profiler.py`. These either depend on heavy third-party libraries (gtfs-kit) or are tied to the Silver→GTFS pipeline.
 
 ---
 
-## 3. `gtfs-exchange` (The I/O & Converter Module)
-**Purpose:** Bridges external file formats (CSVs, ZIPs) with the internal database engine.
-**Primary Use Case:** Converting legacy static feeds to relational structures, or pulling subsets of a heavy database to distribute to the public.
+## 2. Couplings to remove
 
-### Main Methods & Actions:
-* **`import_gtfs_zip(zip_path)`**: Safely unzips and ingests an entire external GTFS feed into the database, respecting the foreign-key insertion order (e.g., Agencies before Routes before Trips).
-* **`import_batch(csv_files)`**: Transactional mechanism that allows a user to upload 5 independent CSV files at once, rolling back the operation completely if one table breaks.
-* **`export_gtfs_feed()`**: Transpiles the SQLite database back out to a strict, spec-compliant `.zip` package.
-* **`export_gtfs_subset(dates, routes)`**: Filters the SQL database geometrically/temporally, allowing a user to generate a `.zip` covering only a specific bus route on a specific weekend.
-* **`compute_feed_completeness()`**: Scans available tables to weight and assign an overall dataset maturity score.
+Three concrete edits unblock extraction. All other code in the five kept files is already self-contained.
+
+### 2.1 Drop `PROJECTS_ROOT` imports
+
+- `database.py:23` → `from optisus.core.storage.layers import PROJECTS_ROOT`
+- `exporter.py:30` → same import
+
+Both files use `PROJECTS_ROOT / project_slug / "gtfs.db"` to resolve paths. Replace with a user-supplied path.
+
+### 2.2 Replace `project_slug: str` plumbing with an explicit DB handle
+
+Every public function in `database.py`, `importer.py`, `exporter.py` takes `project_slug: str` and internally calls `get_gtfs_db_path(project_slug)`. For a library this is inverted: the caller owns the path.
+
+Introduce a small class that holds the path and exposes the existing functions as methods. The slug-as-db-name ergonomics the user asked for are preserved via a classmethod.
+
+```python
+class GtfsDatabase:
+    def __init__(self, db_path: Path): ...
+
+    @classmethod
+    def from_slug(cls, slug: str, root: Path = Path.cwd()) -> "GtfsDatabase":
+        return cls(root / f"{slug}.db")
+```
+
+Existing module-level functions become thin wrappers that call `GtfsDatabase(path).method(...)`, or are deleted if the class covers them.
+
+### 2.3 Make exporter's pre-export validation optional but default-on
+
+`exporter.py:29` imports `validate_gtfs_feed` from the validator. Since validator stays in v1, no import change is needed — but expose a `validate: bool = True` flag on `export_zip` so users can skip validation if they know what they are doing.
 
 ---
 
-## 4. `gtfs-validator` (The Quality Assurance Module)
-**Purpose:** Pure Python diagnostic tool for auditing raw GTFS Zip binaries against global specifications.
-**Primary Use Case:** Auditing a third-party feed or running standard deployment checks before dispatching a feed to a routing vendor (e.g., Google Maps).
+## 3. Public API (v1 surface)
 
-### Main Methods & Actions:
-* **`validate_gtfs_feed(zip_path)`**: The primary orchestrator. Extracts headers, identifies types, and creates a consolidated compliance report (Warnings vs. Critical Errors).
-* **`_check_referential_integrity()`**: Validates IDs linking CSVs logically.
-* **`_check_stop_sequence_monotonic()`**: Identifies timeline errors where a bus reaches stop sequence "4" before stop sequence "3".
+One top-level import path. No submodule drilling required for common tasks.
+
+```python
+from pid_gtfs import (
+    GtfsDatabase,
+    preview_zip,
+    import_zip,
+    export_zip,
+    ImportMode,
+)
+from pid_gtfs.schemas import (
+    GtfsAgency, GtfsStop, GtfsRoute, GtfsTrip, GtfsStopTime,
+    GtfsCalendar, GtfsCalendarDate, GtfsShape, GtfsFrequency,
+    GtfsTransfer, GtfsFeedInfo,
+    GTFS_TABLE_MODELS,
+)
+```
+
+### 3.1 Quickstart
+
+```python
+from pid_gtfs import GtfsDatabase, import_zip, export_zip
+
+db = GtfsDatabase("my_feed.db")                  # creates schema on first use
+result = import_zip(db, "source.zip", mode="replace")
+print(result.inserted, result.failed)
+
+stops = db.get_records("stops", limit=100)
+report = db.check_integrity()
+assert report.is_clean
+
+export_zip(db, "out.zip", validate=True)
+```
+
+### 3.2 `GtfsDatabase` methods (wrap existing `database.py` functions)
+
+| Method | Wraps | Returns |
+|---|---|---|
+| `__init__(db_path)` | `create_gtfs_database` | — |
+| `from_slug(slug, root)` | helper | `GtfsDatabase` |
+| `upsert(table, records)` | `upsert_records` | `InsertResult` |
+| `get_records(table, limit, offset)` | `get_table_records` | `list[dict]` |
+| `count(table)` | `get_table_count` | `int` |
+| `delete(table, where)` | `delete_records` | `int` |
+| `clear(table)` | `clear_table` | `int` |
+| `clear_all()` | `clear_all_tables` | `dict[str, int]` |
+| `check_integrity()` | `check_integrity` | `IntegrityReport` |
+| `summary()` | `get_database_summary` | `dict` |
+
+### 3.3 Top-level functions
+
+| Function | Wraps | Notes |
+|---|---|---|
+| `preview_zip(source)` | `preview_gtfs_zip` | Accepts path or `BinaryIO` |
+| `import_zip(db, source, mode, …)` | `import_gtfs_zip` | Takes `GtfsDatabase`, not slug |
+| `export_zip(db, out_path, validate=True)` | `export_gtfs_feed` | Writes single zip, not timestamped dir |
+
+The existing exporter writes to `projects/<slug>/exports/latest/…` — v1 lets the caller pass an explicit output zip path instead.
+
+Date- and route-restricted `export_subset` is **deferred to v2** because it depends on `gtfs-kit`. Keeping v1 stdlib+pydantic only avoids a heavy transitive dependency chain (pandas, shapely, folium). Full-feed export covers the primary user need.
 
 ---
 
-## 5. `gtfs-analytics` (The Analytics & Spatial Module)
-**Purpose:** Provides high-level mathematical and spatial summarization using third-party adapters.
-**Primary Use Case:** Deep-dive explorations, rendering map plots, or auditing NULL boundaries to find mapping blindspots.
+## 4. Package layout
 
-### Main Methods & Actions:
-* **`feed_from_db()`**: Acts as an adapter, piping SQLite queries instantly into `gtfs-kit` dataframes.
-* **`compute_analytics()`**: Yields high-level transport indicators such as standard service dates and spatial densities.
-* **`build_routes_map()` / `build_stops_map()`**: Renders geographical GeoJSON/Folium representations.
-* **`profile_table_columns()`**: A lazy-loaded inspection that generates distinct value counts and strictly measures the percentage of missing strings (NULLs) across massive transit tables.
+The package lives in a new top-level directory at the repo root (sibling to `data_pipeline_optisus/` and `GTFS_UserGuide/`):
+
+```
+PID-GTFS/
+├── pyproject.toml              # name = "pid-gtfs", pydantic>=2 only
+├── README.md                   # install + quickstart
+├── src/
+│   └── pid_gtfs/
+│       ├── __init__.py         # re-exports the v1 surface
+│       ├── schemas.py          # copied verbatim from core/schemas/gtfs.py
+│       ├── database.py         # core/gtfs/database.py with PROJECTS_ROOT removed
+│       ├── importer.py         # core/gtfs/importer.py, slug→db-handle
+│       ├── exporter.py         # core/gtfs/exporter.py, slug→db-handle, path-based output
+│       ├── validator.py        # core/gtfs/validator.py verbatim
+│       └── py.typed            # PEP 561 marker
+└── tests/
+    ├── test_schemas.py
+    ├── test_database.py
+    ├── test_importer.py
+    ├── test_exporter.py
+    └── test_integration.py     # import → query → export round-trip
+```
+
+Distribution name: `pid-gtfs`. Import name: `pid_gtfs`. Dependencies: `pydantic>=2` only — everything else is stdlib (`sqlite3`, `csv`, `zipfile`, `pathlib`, `logging`).
+
+---
+
+## 5. Migration steps
+
+Order matters — each step is independently testable. Since `optisus` is not being migrated in this phase, all edits are in the new `PID-GTFS/` directory; the original `data_pipeline_optisus/src/optisus/core/gtfs/` and `core/schemas/gtfs.py` are left untouched.
+
+1. **Scaffold the package:** create `PID-GTFS/` with `pyproject.toml` (`name = "pid-gtfs"`, `pydantic>=2`), `src/pid_gtfs/`, and `tests/`.
+2. **Copy `schemas/gtfs.py` → `src/pid_gtfs/schemas.py`** unchanged. Run the copied `test_schemas.py` to confirm no hidden imports.
+3. **Copy `gtfs/validator.py` → `src/pid_gtfs/validator.py`** unchanged. Only imports schemas.
+4. **Port `database.py`:**
+   - Remove `from optisus.core.storage.layers import PROJECTS_ROOT`.
+   - Introduce `GtfsDatabase` class holding `db_path`. Each method mirrors the current module-level function but takes `self.db_path` instead of resolving from slug.
+   - Delete the module-level `project_slug`-based functions outright. No compatibility shims — `optisus` has its own copy.
+5. **Port `importer.py`:** replace `project_slug: str` with `db: GtfsDatabase`. Internals that call `get_connection(project_slug)` become `db.connect()`.
+6. **Port `exporter.py`:** same slug→handle swap. Add explicit `out_path: Path` parameter and `validate: bool = True` flag. Drop the `exports/latest` vs. timestamped directory logic — caller decides the output path.
+7. **Write `__init__.py` re-exports** for the v1 surface listed in §3.
+8. **Copy tests** from `tests/test_gtfs_*.py`. Adapt the `isolated_gtfs` fixture to hand out a `GtfsDatabase(tmp_path / "test.db")` directly instead of patching `PROJECTS_ROOT`.
+9. **Write quickstart README** at `PID-GTFS/README.md`.
+10. **Reference from `GTFS_UserGuide/`:** the user guide links to `PID-GTFS/` and includes a copy-or-clone quickstart. No PyPI release in this phase.
+
+---
+
+## 6. What this plan deliberately does not do
+
+- Does not introduce a CLI. Library only.
+- Does not add new validation rules beyond what `validator.py` already does.
+- Does not touch the Silver→GTFS mapper — that logic stays in `optisus` because it encodes data-lake conventions that do not generalize.
+- Does not wrap `gtfs-kit` — analytics is a later module.
+- Does not modify `optisus`. The app keeps its current GTFS code; PID-GTFS is a clean copy.
+- Does not publish to PyPI. Distribution is source-only (copy or clone) during this phase.
