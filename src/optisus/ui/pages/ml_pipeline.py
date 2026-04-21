@@ -74,7 +74,7 @@ def _render_home() -> None:
             placeholder="Enter project name…",
         )
     with col_btn:
-        create_clicked = st.button("Create project", key="btn_create_project", use_container_width=True)
+        create_clicked = st.button("Create project", key="btn_create_project", width="stretch")
     if create_clicked:
         if new_project_name.strip():
             try:
@@ -109,7 +109,7 @@ def _render_home() -> None:
                         key=f"open_{proj['slug']}",
                         on_click=_open_project,
                         args=(proj,),
-                        use_container_width=True,
+                        width="stretch",
                     )
 
 
@@ -157,7 +157,7 @@ def _render_mode_panel(project_slug: str) -> None:
             f"Build {selected_mode} Artifacts",
             key="btn_build_mode",
             type="primary",
-            use_container_width=True,
+            width="stretch",
         ):
             with st.spinner(f"Building {selected_mode} artifacts..."):
                 if selected_mode == MODE_A:
@@ -190,7 +190,7 @@ def _render_mode_panel(project_slug: str) -> None:
             f"Build {selected_mode} Artifacts",
             key="btn_build_mode",
             disabled=True,
-            use_container_width=True,
+            width="stretch",
         )
 
 
@@ -274,7 +274,7 @@ def _render_project(project: dict) -> None:
                 st.error(f"Could not read file: {read_err}")
             else:
                 st.caption("Column preview (normalized)")
-                st.dataframe(df_preview.head(10), use_container_width=True)
+                st.dataframe(df_preview.head(10), width="stretch")
 
             if st.button("Validate & Save", key="btn_validate_tabular"):
                 layers = create_project_layered_run(project_slug, schema_choice)
@@ -334,7 +334,7 @@ def _render_project(project: dict) -> None:
                         silver_artifacts.append(str(silver_path))
 
                         st.success(f"Valid rows: {valid_count}")
-                        st.dataframe(clean_df, use_container_width=True)
+                        st.dataframe(clean_df, width="stretch")
 
                         metrics = build_gold_metrics(clean_df, schema_choice)
                         gold_path = save_gold_metrics(metrics, layers["gold"], schema_choice)
@@ -402,7 +402,7 @@ def _render_project(project: dict) -> None:
                 st.caption("Column preview")
                 st.dataframe(
                     gdf_preview.drop(columns=["geometry"], errors="ignore").head(10),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
                 available_cols = [c for c in gdf_preview.columns if c != gdf_preview.geometry.name]
@@ -465,7 +465,7 @@ def _render_project(project: dict) -> None:
                         st.success(f"Valid features: {result['valid_rows']}")
                         st.dataframe(
                             gdf_clean.drop(columns=["geometry"], errors="ignore").head(20),
-                            use_container_width=True,
+                            width="stretch",
                         )
 
                         spatial_metrics = build_gold_spatial_metrics(gdf_clean, "spatial_data")

@@ -81,6 +81,7 @@ INSERT_ORDER: tuple[str, ...] = (
 class ImportMode(str, Enum):
     REPLACE = "replace"
     MERGE = "merge"
+    MERGE_PARTIAL = "merge_partial"
     ABORT_IF_NOT_EMPTY = "abort_if_not_empty"
 
 
@@ -284,11 +285,26 @@ def import_gtfs_zip(
         _enforce_member_guards(zf)
 
         known, _unknown = _map_members_to_tables(zf)
-        missing = _required_file_issues(known)
-        if missing:
-            raise GtfsImportError(
-                "Archive is missing required GTFS files: " + ", ".join(missing)
-            )
+
+        # MERGE_PARTIAL accepts archives that don't carry every required file,
+        # but only into an already-populated database. FK integrity is then
+        # enforced row-by-row by SQLite's PRAGMA foreign_keys=ON.
+        if mode == ImportMode.MERGE_PARTIAL:
+            if not known:
+                raise GtfsImportError(
+                    "Archive contains no recognised GTFS files to merge."
+                )
+            if _db_is_empty(project_slug):
+                raise GtfsImportError(
+                    "MERGE_PARTIAL requires an already-populated database. "
+                    "Use REPLACE or MERGE for the initial load."
+                )
+        else:
+            missing = _required_file_issues(known)
+            if missing:
+                raise GtfsImportError(
+                    "Archive is missing required GTFS files: " + ", ".join(missing)
+                )
 
         create_gtfs_database(project_slug)
 

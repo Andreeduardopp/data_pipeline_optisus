@@ -1,0 +1,89 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<PublicationDelivery xmlns="http://www.netex.org.uk/netex" xmlns:gml="http://www.opengis.net/gml/3.2" xmlns:siri="http://www.siri.org.uk/siri" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.15:PT-EPIP-1.0" xsi:schemaLocation="http://www.netex.org.uk/netex http://netex.uk/netex/schema/1.15/xsd/NeTEx_publication.xsd">
+  <PublicationTimestamp>2026-04-21T08:55:45Z</PublicationTimestamp>
+  <ParticipantRef>PNDT_TEST</ParticipantRef>
+  <Description lang="pt">NeTEx schedules for line PT:GUIMABUS:Line:R2</Description>
+  <dataObjects>
+    <CompositeFrame id="GUIMABUS:CompositeFrame:Timetable_Line_R2" version="20260421">
+      <ValidBetween>
+        <FromDate>2026-01-01T00:00:00</FromDate>
+        <ToDate>2026-12-31T00:00:00</ToDate>
+      </ValidBetween>
+      <TypesOfFrameRef>
+        <TypeOfFrameRef ref="epip:EU_PI_TIMETABLE" versionRef="1.0"/>
+      </TypesOfFrameRef>
+      <frames>
+        <ResourceFrame id="GUIMABUS:ResourceFrame:ResourceFrame_1" version="20260421">
+          <codespaces>
+            <Codespace id="PT:GUIMABUS:Codespace:GUIMABUS">
+              <Xmlns>GUIMABUS</Xmlns>
+              <XmlnsUrl>http://www.pndt.pt/netex/GUIMABUS</XmlnsUrl>
+              <Description>PT-EPIP codespace for Guimabus</Description>
+            </Codespace>
+          </codespaces>
+          <dataSources>
+            <DataSource id="PT:GUIMABUS:DataSource:default" version="20260421">
+              <Name lang="pt">CIM do Ave</Name>
+            </DataSource>
+          </dataSources>
+          <organisations>
+            <Authority id="PT:GUIMABUS:Authority:CIM_AVE" version="20260421">
+              <Name lang="pt">CIM do Ave</Name>
+              <ContactDetails>
+                <Email>legal@cimave.pt</Email>
+              </ContactDetails>
+            </Authority>
+            <Operator id="PT:GUIMABUS:Operator:GUIMABUS" version="20260421">
+              <Name lang="pt">Guimabus</Name>
+              <ShortName lang="pt">GUIMABUS</ShortName>
+              <ContactDetails>
+                <Email>info@guimabus.pt</Email>
+              </ContactDetails>
+            </Operator>
+          </organisations>
+          <responsibilitySets>
+            <ResponsibilitySet id="GUIMABUS:ResponsibilitySet:default" version="20260421">
+              <roles>
+                <ResponsibilityRoleAssignment id="PT:GUIMABUS:ResponsibilityRoleAssignment:ownership" version="20260421">
+                  <ResponsibleOrganisationRef ref="PT:GUIMABUS:Authority:CIM_AVE" version="any"/>
+                  <ResponsibilityRoleType>ownership</ResponsibilityRoleType>
+                </ResponsibilityRoleAssignment>
+                <ResponsibilityRoleAssignment id="PT:GUIMABUS:ResponsibilityRoleAssignment:operation" version="20260421">
+                  <ResponsibleOrganisationRef ref="PT:GUIMABUS:Operator:GUIMABUS" version="any"/>
+                  <ResponsibilityRoleType>operation</ResponsibilityRoleType>
+                </ResponsibilityRoleAssignment>
+              </roles>
+            </ResponsibilitySet>
+          </responsibilitySets>
+        </ResourceFrame>
+        <TimetableFrame id="GUIMABUS:TimetableFrame:Line_R2" version="20260421">
+          <vehicleJourneys>
+            <ServiceJourney id="PT:GUIMABUS:ServiceJourney:T_NIGHT" version="20260421">
+              <Name lang="pt">Overnight</Name>
+              <dayTypes>
+                <DayTypeRef ref="PT:GUIMABUS:DayType:WK" version="any"/>
+              </dayTypes>
+              <JourneyPatternRef ref="PT:GUIMABUS:JourneyPattern:R2_0_2" version="any"/>
+              <LineRef ref="PT:GUIMABUS:Line:R2" version="any"/>
+              <OperatorRef ref="PT:GUIMABUS:Operator:GUIMABUS" version="any"/>
+              <passingTimes>
+                <TimetabledPassingTime id="PT:GUIMABUS:TimetabledPassingTime:T_NIGHT_1">
+                  <StopPointInJourneyPatternRef ref="PT:GUIMABUS:StopPointInJourneyPattern:R2_0_2_1" version="any"/>
+                  <ArrivalTime>23:50:00</ArrivalTime>
+                  <DepartureTime>23:50:00</DepartureTime>
+                </TimetabledPassingTime>
+                <TimetabledPassingTime id="PT:GUIMABUS:TimetabledPassingTime:T_NIGHT_2">
+                  <StopPointInJourneyPatternRef ref="PT:GUIMABUS:StopPointInJourneyPattern:R2_0_2_2" version="any"/>
+                  <ArrivalTime>01:10:00</ArrivalTime>
+                  <ArrivalDayOffset>1</ArrivalDayOffset>
+                  <DepartureTime>01:10:00</DepartureTime>
+                  <DepartureDayOffset>1</DepartureDayOffset>
+                </TimetabledPassingTime>
+              </passingTimes>
+            </ServiceJourney>
+          </vehicleJourneys>
+        </TimetableFrame>
+      </frames>
+    </CompositeFrame>
+  </dataObjects>
+</PublicationDelivery>

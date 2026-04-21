@@ -1,0 +1,141 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<PublicationDelivery xmlns="http://www.netex.org.uk/netex" xmlns:gml="http://www.opengis.net/gml/3.2" xmlns:siri="http://www.siri.org.uk/siri" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.15:PT-EPIP-1.0" xsi:schemaLocation="http://www.netex.org.uk/netex http://netex.uk/netex/schema/1.15/xsd/NeTEx_publication.xsd">
+  <PublicationTimestamp>2026-04-21T08:55:45Z</PublicationTimestamp>
+  <ParticipantRef>PNDT_TEST</ParticipantRef>
+  <Description lang="pt">NeTEx stops &amp; calendar for Guimabus</Description>
+  <dataObjects>
+    <CompositeFrame id="GUIMABUS:CompositeFrame:Stops" version="20260421">
+      <ValidBetween>
+        <FromDate>2026-01-01T00:00:00</FromDate>
+        <ToDate>2026-12-31T00:00:00</ToDate>
+      </ValidBetween>
+      <TypesOfFrameRef>
+        <TypeOfFrameRef ref="epip:EU_PI_STOP" versionRef="1.0"/>
+      </TypesOfFrameRef>
+      <frames>
+        <ResourceFrame id="GUIMABUS:ResourceFrame:ResourceFrame_1" version="20260421">
+          <codespaces>
+            <Codespace id="PT:GUIMABUS:Codespace:GUIMABUS">
+              <Xmlns>GUIMABUS</Xmlns>
+              <XmlnsUrl>http://www.pndt.pt/netex/GUIMABUS</XmlnsUrl>
+              <Description>PT-EPIP codespace for Guimabus</Description>
+            </Codespace>
+          </codespaces>
+          <dataSources>
+            <DataSource id="PT:GUIMABUS:DataSource:default" version="20260421">
+              <Name lang="pt">CIM do Ave</Name>
+            </DataSource>
+          </dataSources>
+          <organisations>
+            <Authority id="PT:GUIMABUS:Authority:CIM_AVE" version="20260421">
+              <Name lang="pt">CIM do Ave</Name>
+              <ContactDetails>
+                <Email>legal@cimave.pt</Email>
+              </ContactDetails>
+            </Authority>
+            <Operator id="PT:GUIMABUS:Operator:GUIMABUS" version="20260421">
+              <Name lang="pt">Guimabus</Name>
+              <ShortName lang="pt">GUIMABUS</ShortName>
+              <ContactDetails>
+                <Email>info@guimabus.pt</Email>
+              </ContactDetails>
+            </Operator>
+          </organisations>
+          <responsibilitySets>
+            <ResponsibilitySet id="GUIMABUS:ResponsibilitySet:default" version="20260421">
+              <roles>
+                <ResponsibilityRoleAssignment id="PT:GUIMABUS:ResponsibilityRoleAssignment:ownership" version="20260421">
+                  <ResponsibleOrganisationRef ref="PT:GUIMABUS:Authority:CIM_AVE" version="any"/>
+                  <ResponsibilityRoleType>ownership</ResponsibilityRoleType>
+                </ResponsibilityRoleAssignment>
+                <ResponsibilityRoleAssignment id="PT:GUIMABUS:ResponsibilityRoleAssignment:operation" version="20260421">
+                  <ResponsibleOrganisationRef ref="PT:GUIMABUS:Operator:GUIMABUS" version="any"/>
+                  <ResponsibilityRoleType>operation</ResponsibilityRoleType>
+                </ResponsibilityRoleAssignment>
+              </roles>
+            </ResponsibilitySet>
+          </responsibilitySets>
+        </ResourceFrame>
+        <SiteFrame id="GUIMABUS:SiteFrame:SiteFrame_1" version="20260421">
+          <stopPlaces>
+            <StopPlace id="PT:GUIMABUS:StopPlace:STATION_1" version="20260421">
+              <Name lang="pt">Central Station</Name>
+              <Centroid>
+                <Location>
+                  <Longitude>-8.29</Longitude>
+                  <Latitude>41.44</Latitude>
+                </Location>
+              </Centroid>
+              <TransportMode>bus</TransportMode>
+              <quays>
+                <Quay id="PT:GUIMABUS:Quay:QUAY_A" version="20260421">
+                  <Name lang="pt">Central - Platform A</Name>
+                  <Centroid>
+                    <Location>
+                      <Longitude>-8.291</Longitude>
+                      <Latitude>41.44</Latitude>
+                    </Location>
+                  </Centroid>
+                  <PublicCode>A</PublicCode>
+                </Quay>
+              </quays>
+            </StopPlace>
+            <StopPlace id="PT:GUIMABUS:StopPlace:ORPHAN_place" version="20260421">
+              <Name lang="pt">Mercado</Name>
+              <Centroid>
+                <Location>
+                  <Longitude>-8.3</Longitude>
+                  <Latitude>41.45</Latitude>
+                </Location>
+              </Centroid>
+              <TransportMode>bus</TransportMode>
+              <quays>
+                <Quay id="PT:GUIMABUS:Quay:ORPHAN" version="20260421">
+                  <Name lang="pt">Mercado</Name>
+                  <Centroid>
+                    <Location>
+                      <Longitude>-8.3</Longitude>
+                      <Latitude>41.45</Latitude>
+                    </Location>
+                  </Centroid>
+                </Quay>
+              </quays>
+            </StopPlace>
+          </stopPlaces>
+        </SiteFrame>
+        <ServiceCalendarFrame id="GUIMABUS:ServiceCalendarFrame:ServiceCalendarFrame_1" version="20260421">
+          <dayTypes>
+            <DayType id="PT:GUIMABUS:DayType:WK" version="20260421">
+              <Name lang="pt">WK</Name>
+              <properties>
+                <PropertyOfDay>
+                  <DaysOfWeek>Monday Tuesday Wednesday Thursday Friday</DaysOfWeek>
+                </PropertyOfDay>
+              </properties>
+            </DayType>
+          </dayTypes>
+          <operatingPeriods>
+            <OperatingPeriod id="PT:GUIMABUS:OperatingPeriod:WK" version="20260421">
+              <FromDate>2026-01-01T00:00:00</FromDate>
+              <ToDate>2026-12-31T00:00:00</ToDate>
+            </OperatingPeriod>
+          </operatingPeriods>
+          <dayTypeAssignments>
+            <DayTypeAssignment id="PT:GUIMABUS:DayTypeAssignment:WK_period" version="20260421">
+              <Order>1</Order>
+              <OperatingPeriodRef ref="PT:GUIMABUS:OperatingPeriod:WK" version="any"/>
+              <DayTypeRef ref="PT:GUIMABUS:DayType:WK" version="any"/>
+              <isAvailable>true</isAvailable>
+            </DayTypeAssignment>
+            <DayTypeAssignment id="PT:GUIMABUS:DayTypeAssignment:WK_20260501" version="20260421">
+              <Order>2</Order>
+              <Date>2026-05-01</Date>
+              <DayTypeRef ref="PT:GUIMABUS:DayType:WK" version="any"/>
+              <isAvailable>false</isAvailable>
+            </DayTypeAssignment>
+          </dayTypeAssignments>
+        </ServiceCalendarFrame>
+      </frames>
+    </CompositeFrame>
+  </dataObjects>
+</PublicationDelivery>

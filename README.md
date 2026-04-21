@@ -4,8 +4,8 @@ This project provides a configurable ingestion pipeline for tabular and spatial 
 
 The codebase is packaged under `src/optisus/` with a clean **core vs. ui** split:
 
-- `optisus.core.*` — pure Python (no Streamlit): schemas, ingestion, storage, ML mode builders, MLOps feature store, GTFS (database, mapper, importer, exporter, validator, gtfs-kit analytics bridge). Reusable from scripts, notebooks, or tests.
-- `optisus.ui.*` — Streamlit layer: app entry, theme, and two pages (`ml_pipeline`, `gtfs_pipeline`).
+- `optisus.core.*` — pure Python (no Streamlit): schemas, ingestion, storage, ML mode builders, MLOps feature store, GTFS (database, mapper, importer, batch importer, exporter, validator, database profiler, gtfs-kit analytics bridge). Reusable from scripts, notebooks, or tests.
+- `optisus.ui.*` — Streamlit layer: app entry, theme, and three pages (`ml_pipeline`, `gtfs_pipeline`, `db_overview`).
 
 Root-level `app.py` and `admin_ui.py` are thin bootstraps that call `optisus.ui.app.main()`.
 
@@ -19,13 +19,15 @@ src/optisus/
 │   ├── storage/               # project/run CRUD, Bronze/Silver/Gold layout
 │   ├── ml/                    # Mode A / Mode B Gold artifact builders
 │   ├── mlops/                 # versioned feature store, audit logging
-│   └── gtfs/                  # database, mapper, importer, exporter, validator, analytics
+│   └── gtfs/                  # database, mapper, importer, batch_import,
+│                              # exporter, validator, database_profiler, analytics
 └── ui/                        # streamlit layer
     ├── app.py                 # main() — sidebar, theme, st.navigation
     ├── theme.py               # shared CSS, color tokens, logo
     └── pages/
         ├── ml_pipeline.py     # Module 1 — ML Data Preparation
-        └── gtfs_pipeline.py   # Module 2 — GTFS Data Maturity
+        ├── gtfs_pipeline.py   # Module 2 — GTFS Data Maturity
+        └── db_overview.py     # Module 3 — Database Overview
 ```
 
 ## Prerequisites
@@ -71,12 +73,13 @@ The app will open in your browser (default: http://localhost:8501).
 
 ## How it works
 
-The app is a multipage Streamlit application with two modules selectable from the sidebar:
+The app is a multipage Streamlit application with three modules selectable from the sidebar:
 
 | Module | Purpose |
 |---|---|
 | **Module 1 — ML Data Preparation** (`ml_pipeline`) | Project management, tabular/spatial uploads, Bronze→Silver→Gold runs, dual-mode forecasting builds |
-| **Module 2 — GTFS Data Maturity** (`gtfs_pipeline`) | Map Silver datasets to GTFS, ingest existing GTFS feeds, browse/edit tables, validate, export, visualize |
+| **Module 2 — GTFS Data Maturity** (`gtfs_pipeline`) | Map Silver datasets to GTFS, ingest full or partial GTFS feeds, batch-update tables, browse/edit, validate, export, visualize |
+| **Module 3 — Database Overview** (`db_overview`) | Read-only dashboard: database health, table heatmap, per-column profiling, ER diagram, storage footprint |
 
 ### Projects
 
@@ -129,20 +132,51 @@ surfaces:
 3. **Feed completeness gauge** — scored coverage of required vs. optional
    tables.
 4. **GTFS table browser** — paginated view/edit of each table.
-5. **Direct GTFS upload** — drop an existing agency/vendor `.zip` feed,
-   preview its contents, and ingest in one of three modes:
+5. **Import GTFS `.zip`** — drop an existing agency/vendor feed, preview
+   its contents, and ingest in one of four modes:
    - `REPLACE` — wipe the DB and load from the zip.
-   - `MERGE` — upsert into the existing DB.
+   - `MERGE` — upsert into the existing DB (requires a complete feed).
+   - `MERGE_PARTIAL` — upsert only the tables present in the archive,
+     leaving everything else untouched. Only available when the database
+     is already populated; auto-selected when the uploaded ZIP is
+     incomplete. FK integrity is enforced row-by-row by SQLite.
    - `ABORT_IF_NOT_EMPTY` — safe mode; refuses to write if any table has rows.
+
    The importer streams every member through `ZipFile.open`, enforces
    size / zip-bomb guards, and reuses the same row-validation + SQL upsert
    path as the Silver → GTFS mapper.
-6. **Silver → GTFS mapping wizard** — map validated Silver datasets onto
+6. **Batch CSV update** — drop several GTFS CSVs at once
+   (e.g. `stops.csv`, `routes.csv`, `trips.csv`). Filenames are matched
+   to GTFS tables (overridable per file); the import runs in FK-safe
+   order inside **one SQLite transaction** — if anything fails, the
+   database is rolled back to its prior state.
+7. **Silver → GTFS mapping wizard** — map validated Silver datasets onto
    GTFS tables without needing an existing feed.
-7. **Integrity report** — FK and structural checks.
-8. **Export & validate** — produce a full-feed `.zip` (`exports/latest/gtfs.zip`)
+8. **Integrity report** — FK and structural checks.
+9. **Export & validate** — produce a full-feed `.zip` (`exports/latest/gtfs.zip`)
    or date-/route-filtered subset exports (`exports/<timestamp>/`), plus
    analytics and Folium route/stop maps via the gtfs-kit bridge.
+
+### Database Overview module
+
+Module 3 is a read-only dashboard over the project's GTFS SQLite database.
+Every call is served from a small mtime-keyed cache, so switching
+projects or flipping between tables is instant until the database is
+next written to.
+
+1. **Header card** — total records, populated vs. total tables, DB size,
+   completeness %, schema version, timestamps, and an integrity badge.
+2. **Table heatmap** — all 15 GTFS / GTFS-ride tables grouped by role
+   (Core / Service / Spatial / Metadata / GTFS-ride) and colour-coded by
+   row count. Each card shows the column count and FK parents.
+3. **Table deep-dive** — pick a table and run **lazy** per-column
+   profiling: data type, null %, distinct count, sample values. Computed
+   on demand so an empty DB or an unopened table costs nothing.
+4. **ER diagram** — a Mermaid `erDiagram` derived from the canonical
+   FK list; edge labels carry the FK column name and parent→child row
+   counts.
+5. **Storage footprint** — DB size, `exports/` directory size, `runs/`
+   directory size, and total project footprint.
 
 ### Storage layout
 
@@ -181,9 +215,11 @@ Because `optisus.core` has no Streamlit dependency, you can drive the pipeline f
 from optisus.core.storage.layers import create_project, list_projects
 from optisus.core.gtfs.mapper import map_project_to_gtfs
 from optisus.core.gtfs.importer import import_gtfs_zip, preview_gtfs_zip, ImportMode
+from optisus.core.gtfs.batch_import import import_batch, preview_batch
 from optisus.core.gtfs.exporter import export_gtfs_feed, export_gtfs_subset
 from optisus.core.gtfs.validator import validate_gtfs_feed
 from optisus.core.gtfs.analytics import feed_from_db, compute_analytics, build_routes_map
+from optisus.core.gtfs.database_profiler import profile_database, profile_table_columns
 
 slug = create_project("Demo City")
 
@@ -194,6 +230,15 @@ map_project_to_gtfs(slug)
 preview = preview_gtfs_zip("path/to/feed.zip")          # inspect before committing
 import_gtfs_zip(slug, "path/to/feed.zip", mode=ImportMode.REPLACE)
 
+# Option C — incremental update from a partial .zip
+#           (only the tables present are touched; DB must already be populated)
+import_gtfs_zip(slug, "path/to/partial.zip", mode=ImportMode.MERGE_PARTIAL)
+
+# Option D — transactional batch CSV update
+#           (FK-safe order, single SQLite transaction, rollback on failure)
+with open("stops.csv", "rb") as s, open("routes.csv", "rb") as r:
+    import_batch(slug, [("stops.csv", s.read()), ("routes.csv", r.read())])
+
 result = export_gtfs_feed(slug)                         # exports/latest/gtfs.zip
 subset = export_gtfs_subset(slug, dates=["20260501"])   # exports/<timestamp>/gtfs.zip
 report = validate_gtfs_feed(result.zip_path)
@@ -201,6 +246,10 @@ report = validate_gtfs_feed(result.zip_path)
 feed = feed_from_db(slug)                               # gtfs-kit Feed, no ZIP round-trip
 stats = compute_analytics(feed)
 routes_map = build_routes_map(feed)                     # Folium map
+
+# Read-only dashboard data (mtime-cached; lazy per-column profiling)
+overview = profile_database(slug)                       # cheap summary
+cols = profile_table_columns(slug, "stops")             # null %, distinct, samples
 ```
 
 ## Running tests
@@ -214,5 +263,9 @@ redirects `DATA_LAKE_ROOT` / `PROJECTS_ROOT` to `tmp_path`, so the real
 filesystem is never touched. Coverage includes storage layers, all GTFS
 Pydantic schemas, the SQLite database layer, the Silver → GTFS mapper,
 the GTFS `.zip` importer (preview, modes, FK order, zip-bomb guards,
-round-trip), the exporter (full + subset), and an end-to-end integration
-test from sample files through Silver, DB, zip export, and the validator.
+round-trip), the `MERGE_PARTIAL` incremental path, the transactional
+batch CSV importer (filename inference, FK-safe ordering, duplicate-target
+rejection), the read-only database profiler (row counts, lazy column
+stats, mtime cache invalidation), the exporter (full + subset), and an
+end-to-end integration test from sample files through Silver, DB, zip
+export, and the validator.

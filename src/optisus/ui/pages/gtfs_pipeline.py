@@ -54,6 +54,21 @@ from optisus.core.gtfs.importer import (
     import_gtfs_zip,
     preview_gtfs_zip,
 )
+from optisus.core.netex.config import (
+    PLACEHOLDER_CODESPACE,
+    NetexAuthority,
+    NetexExportConfig,
+    NetexOperator,
+    load_netex_config,
+    save_netex_config,
+)
+from optisus.core.netex.exporter import export_netex
+from optisus.core.gtfs.batch_import import (
+    BatchImportError,
+    import_batch,
+    infer_table_from_filename,
+    preview_batch,
+)
 from optisus.core.gtfs.mapper import (
     _SCHEMA_TO_MAPPER,
     _ALL_GTFS_TABLES,
@@ -637,7 +652,7 @@ def _render_export_section(project_slug: str) -> None:
         type="primary",
         key="btn_export",
         disabled=not vr.can_export,
-        use_container_width=False,
+        width="content",
     )
 
     if export_clicked:
@@ -896,7 +911,7 @@ def _render_analytics_and_map(slug: str) -> None:
                 ]
                 if c in rs.columns
             ]
-            st.dataframe(rs[display_cols], use_container_width=True, hide_index=True)
+            st.dataframe(rs[display_cols], width="stretch", hide_index=True)
 
     # ── Network map ──────────────────────────────────────────────────────
     st.markdown(
@@ -963,7 +978,7 @@ rows = get_table_records(project_slug, browser_table, limit=_PAGE_SIZE, offset=o
 
 if rows:
     df = pd.DataFrame(rows)
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.dataframe(df, width="stretch", hide_index=True)
 
     # Download
     with col_dl:
@@ -1053,6 +1068,16 @@ if zip_file is not None:
         for err in preview.errors:
             st.error(err)
 
+    # Decide DB-populated state up front — needed for MERGE_PARTIAL eligibility.
+    _pre_summary = get_database_summary(project_slug)
+    _db_populated = bool(_pre_summary.get("exists")) and int(
+        _pre_summary.get("total_records", 0)
+    ) > 0
+
+    partial_eligible = (
+        bool(preview.missing_required) and _db_populated and bool(preview.recognised_tables)
+    )
+
     if preview.missing_required:
         missing_display = [
             "calendar.txt or calendar_dates.txt"
@@ -1060,10 +1085,18 @@ if zip_file is not None:
             else f"{m}.txt"
             for m in preview.missing_required
         ]
-        st.error(
-            "Archive is missing required GTFS files: "
-            + ", ".join(f"`{m}`" for m in missing_display)
-        )
+        if partial_eligible:
+            st.info(
+                "This archive is missing some required GTFS files — "
+                + ", ".join(f"`{m}`" for m in missing_display)
+                + ". Because the project database is already populated, "
+                "you can still merge it using **Merge partial** below."
+            )
+        else:
+            st.error(
+                "Archive is missing required GTFS files: "
+                + ", ".join(f"`{m}`" for m in missing_display)
+            )
 
     if preview.recognised_tables:
         st.markdown("**Recognised tables**")
@@ -1073,7 +1106,7 @@ if zip_file is not None:
                 for t, n in sorted(preview.recognised_tables.items())
             ]
         )
-        st.dataframe(preview_df, use_container_width=True, hide_index=True)
+        st.dataframe(preview_df, width="stretch", hide_index=True)
 
     if preview.unknown_files:
         with st.expander(
@@ -1083,29 +1116,40 @@ if zip_file is not None:
                 st.caption(f"• `{name}`")
 
     # Decide the default import mode based on DB state
-    summary = get_database_summary(project_slug)
-    db_has_records = bool(summary.get("exists")) and int(
-        summary.get("total_records", 0)
-    ) > 0
+    db_has_records = _db_populated
 
     if db_has_records:
         st.info(
             f"This project's database already has "
-            f"**{summary.get('total_records', 0):,}** record(s). "
+            f"**{_pre_summary.get('total_records', 0):,}** record(s). "
             "Choose how to merge the uploaded feed."
         )
+
+        options = [
+            "Replace (clear all tables, then insert)",
+            "Merge (upsert — existing PKs are overwritten)",
+        ]
+        if partial_eligible:
+            options.append(
+                "Merge partial (only the tables in this ZIP will be touched)"
+            )
+        options.append("Abort if not empty (safest)")
+
+        # Default to Merge partial when the archive is partial; otherwise Replace
+        default_idx = options.index(
+            next(o for o in options if o.startswith("Merge partial"))
+        ) if partial_eligible else 0
+
         mode_label = st.radio(
             "Import mode",
-            options=[
-                "Replace (clear all tables, then insert)",
-                "Merge (upsert — existing PKs are overwritten)",
-                "Abort if not empty (safest)",
-            ],
-            index=0,
+            options=options,
+            index=default_idx,
             key="gtfs_zip_mode",
         )
         if mode_label.startswith("Replace"):
             selected_mode = ImportMode.REPLACE
+        elif mode_label.startswith("Merge partial"):
+            selected_mode = ImportMode.MERGE_PARTIAL
         elif mode_label.startswith("Merge"):
             selected_mode = ImportMode.MERGE
         else:
@@ -1113,7 +1157,13 @@ if zip_file is not None:
     else:
         selected_mode = ImportMode.REPLACE
 
-    import_disabled = not preview.is_valid
+    # Partial mode tolerates a "not valid" preview (it's missing required files
+    # on purpose). For every other mode, preview.is_valid must hold.
+    import_disabled = (
+        not preview.is_valid and selected_mode != ImportMode.MERGE_PARTIAL
+    ) or (
+        selected_mode == ImportMode.MERGE_PARTIAL and not preview.recognised_tables
+    )
     if st.button(
         "Import feed into database",
         type="primary",
@@ -1151,7 +1201,7 @@ if zip_file is not None:
             if rows:
                 st.dataframe(
                     pd.DataFrame(rows),
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                 )
 
@@ -1172,6 +1222,182 @@ if zip_file is not None:
             if result.total_failed == 0 and result.total_inserted > 0:
                 st.success("Import complete.")
                 st.rerun()
+
+st.markdown("---")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 3b: Batch CSV update (multi-file drop)
+# ═══════════════════════════════════════════════════════════════════════════
+
+st.subheader("Batch update — drop multiple CSVs at once")
+st.caption(
+    "Upload several GTFS CSVs together (e.g. `stops.csv`, `routes.csv`, "
+    "`trips.csv`). Filenames are matched to GTFS tables; the import runs "
+    "in FK-safe order inside a single transaction — if anything fails, "
+    "the database is rolled back to its current state."
+)
+
+batch_files_raw = st.file_uploader(
+    "Upload one or more CSVs",
+    type=["csv", "txt"],
+    accept_multiple_files=True,
+    key="gtfs_batch_upload_files",
+)
+
+if batch_files_raw:
+    # Build the (filename, bytes) tuples once — we'll reuse them for preview
+    # and for the actual import on the button click.
+    batch_tuples = [(f.name, f.getvalue()) for f in batch_files_raw]
+
+    # Let the user override the detected target table per file before import.
+    override_key = "gtfs_batch_table_overrides"
+    if override_key not in st.session_state:
+        st.session_state[override_key] = {}
+    overrides = st.session_state[override_key]
+
+    # Forget overrides for files that are no longer uploaded
+    current_names = {n for n, _ in batch_tuples}
+    for stale in list(overrides):
+        if stale not in current_names:
+            overrides.pop(stale, None)
+
+    table_options = ["(ignore)"] + _GTFS_TABLES
+
+    st.markdown("**Detected targets**")
+    for idx, (fname, data) in enumerate(batch_tuples):
+        inferred = infer_table_from_filename(fname)
+        current = overrides.get(fname, inferred or "(ignore)")
+        c_file, c_target, c_info = st.columns([3, 2, 2])
+        c_file.markdown(
+            f"<div style='font-family:monospace;color:{TEXT_PRIMARY};"
+            f"padding-top:0.35rem;'>{fname}</div>",
+            unsafe_allow_html=True,
+        )
+        try:
+            default_idx = table_options.index(current)
+        except ValueError:
+            default_idx = 0
+        picked = c_target.selectbox(
+            "Target",
+            options=table_options,
+            index=default_idx,
+            key=f"batch_target_{idx}_{fname}",
+            label_visibility="collapsed",
+        )
+        if picked == "(ignore)":
+            overrides[fname] = "(ignore)"
+        else:
+            overrides[fname] = picked
+        size_kb = len(data) / 1024
+        c_info.markdown(
+            f"<div style='color:{TEXT_MUTED};font-size:0.82rem;"
+            f"padding-top:0.35rem;'>{size_kb:,.1f} KB</div>",
+            unsafe_allow_html=True,
+        )
+
+    # Build overrides dict to pass to preview_batch (excluding '(ignore)')
+    active_overrides = {
+        fname: tbl for fname, tbl in overrides.items() if tbl != "(ignore)"
+    }
+    ignored = {fname for fname, tbl in overrides.items() if tbl == "(ignore)"}
+
+    # Build the file tuples actually submitted (skip ignored ones)
+    submit_tuples = [(n, d) for n, d in batch_tuples if n not in ignored]
+
+    if submit_tuples:
+        preview_b = preview_batch(
+            submit_tuples, table_overrides=active_overrides
+        )
+
+        # Surface preview errors & duplicate-table conflicts
+        for err in preview_b.errors:
+            st.error(err)
+        if preview_b.duplicate_tables:
+            st.error(
+                "Multiple files are targeting the same table(s): "
+                + ", ".join(f"`{t}`" for t in sorted(set(preview_b.duplicate_tables)))
+                + ". Pick different targets above."
+            )
+
+        # Summary rows with row counts
+        rows = [
+            {
+                "file": f.filename,
+                "table": f.table or "—",
+                "rows": f.row_count,
+                "size (KB)": f"{f.size_bytes/1024:,.1f}",
+            }
+            for f in preview_b.files
+        ]
+        if rows:
+            st.dataframe(
+                pd.DataFrame(rows),
+                width="stretch",
+                hide_index=True,
+            )
+
+        can_commit = preview_b.is_valid and bool(
+            [f for f in preview_b.files if f.table]
+        )
+
+        if st.button(
+            "Commit batch import",
+            type="primary",
+            disabled=not can_commit,
+            key="btn_batch_import_commit",
+        ):
+            with st.spinner("Importing batch…"):
+                try:
+                    result = import_batch(
+                        project_slug,
+                        submit_tuples,
+                        table_overrides=active_overrides,
+                    )
+                except BatchImportError as exc:
+                    st.error(str(exc))
+                    result = None
+
+            if result is not None:
+                c_ok, c_fail, c_time = st.columns(3)
+                c_ok.metric("Rows inserted", f"{result.total_inserted:,}")
+                c_fail.metric("Rows failed", f"{result.total_failed:,}")
+                c_time.metric("Duration (s)", result.duration_seconds)
+
+                rows_out = [
+                    {
+                        "table": tbl,
+                        "inserted": result.inserted_by_table.get(tbl, 0),
+                        "failed": result.failed_by_table.get(tbl, 0),
+                    }
+                    for tbl in sorted(
+                        set(result.inserted_by_table)
+                        | set(result.failed_by_table)
+                    )
+                ]
+                if rows_out:
+                    st.dataframe(
+                        pd.DataFrame(rows_out),
+                        width="stretch",
+                        hide_index=True,
+                    )
+
+                if result.errors_by_table:
+                    total = sum(len(v) for v in result.errors_by_table.values())
+                    with st.expander(f"{total} validation error(s)", expanded=False):
+                        for tbl, errs in result.errors_by_table.items():
+                            st.markdown(f"**{tbl}** ({len(errs)} shown)")
+                            for err in errs:
+                                st.caption(f"• {err}")
+
+                if result.committed and result.total_failed == 0:
+                    st.success("Batch import complete.")
+                    st.rerun()
+                elif result.committed:
+                    st.warning(
+                        "Import committed with some row-level failures — "
+                        "review the error list above."
+                    )
 
 st.markdown("---")
 
@@ -1205,7 +1431,7 @@ if uploaded_file:
         st.markdown(
             f"**Preview** — {len(upload_df)} rows, {len(upload_df.columns)} columns",
         )
-        st.dataframe(upload_df.head(5), use_container_width=True, hide_index=True)
+        st.dataframe(upload_df.head(5), width="stretch", hide_index=True)
 
         expected_cols = get_table_columns(upload_table)
         missing = [c for c in expected_cols if c not in upload_df.columns]
@@ -1358,7 +1584,7 @@ else:
             [(t, c) for t, c in sorted(populated.items())],
             columns=["Table", "Records"],
         )
-        st.dataframe(count_df, use_container_width=True, hide_index=True)
+        st.dataframe(count_df, width="stretch", hide_index=True)
 
     if irpt.violations:
         with st.expander(f"Violation Details ({len(irpt.violations)})", expanded=True):
@@ -1379,3 +1605,160 @@ st.markdown("---")
 
 st.subheader("Export GTFS Feed")
 _render_export_section(project_slug)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 9: Export NeTEx (PT-EPIP)
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _render_netex_export(slug: str) -> None:
+    """Config form + pre-flight + export button for the PT-EPIP NeTEx feature."""
+    existing = load_netex_config(slug)
+
+    with st.expander("Operator & authority (required)", expanded=existing is None):
+        default_cs = existing.codespace if existing else PLACEHOLDER_CODESPACE
+        codespace = st.text_input(
+            "Codespace",
+            value=default_cs,
+            help=(
+                "Operator NIF (tax id) or IMT-assigned short name. Uppercase "
+                f"alphanumerics only. Leave as '{PLACEHOLDER_CODESPACE}' to block "
+                "export until set."
+            ),
+            key="netex_codespace",
+        ).strip().upper()
+
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.markdown("**Authority (data-ownership)**")
+            auth_id = st.text_input(
+                "Authority id",
+                value=existing.authority.id if existing else "",
+                key="netex_auth_id",
+            )
+            auth_name = st.text_input(
+                "Authority name",
+                value=existing.authority.name if existing else "",
+                placeholder="e.g. CIM do Ave",
+                key="netex_auth_name",
+            )
+            auth_email = st.text_input(
+                "Authority contact email",
+                value=(existing.authority.contact_email or "") if existing else "",
+                key="netex_auth_email",
+            )
+        with col_b:
+            st.markdown("**Operator (service-operation)**")
+            op_id = st.text_input(
+                "Operator id",
+                value=existing.operator.id if existing else "",
+                key="netex_op_id",
+            )
+            op_name = st.text_input(
+                "Operator name",
+                value=existing.operator.name if existing else "",
+                placeholder="e.g. Guimabus",
+                key="netex_op_name",
+            )
+            op_short = st.text_input(
+                "Operator short name (used in zip filename)",
+                value=existing.operator.short_name if existing else "",
+                placeholder="GUIMABUS",
+                key="netex_op_short",
+            ).strip().upper()
+            op_email = st.text_input(
+                "Operator contact email",
+                value=(existing.operator.contact_email or "") if existing else "",
+                key="netex_op_email",
+            )
+
+        participant_ref = st.text_input(
+            "Participant ref (PNDT-assigned)",
+            value=(existing.participant_ref or "") if existing else "",
+            key="netex_participant",
+        )
+
+        if st.button("Save NeTEx config", key="btn_save_netex_cfg"):
+            try:
+                cfg = NetexExportConfig(
+                    codespace=codespace or PLACEHOLDER_CODESPACE,
+                    authority=NetexAuthority(
+                        id=auth_id or "AUTHORITY",
+                        name=auth_name or "Authority",
+                        contact_email=auth_email or None,
+                    ),
+                    operator=NetexOperator(
+                        id=op_id or "OPERATOR",
+                        name=op_name or "Operator",
+                        short_name=op_short or "OPERATOR",
+                        contact_email=op_email or None,
+                    ),
+                    participant_ref=participant_ref or None,
+                )
+                save_netex_config(slug, cfg)
+                st.success("NeTEx config saved.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Could not save config: {e}")
+
+    cfg = load_netex_config(slug)
+    if cfg is None:
+        st.info("Fill in operator & authority above and save to enable export.")
+        return
+
+    if cfg.is_placeholder():
+        st.markdown(
+            f"<div style='background:{ERROR};color:white;padding:0.6rem 0.8rem;"
+            "border-radius:6px;font-weight:600;'>"
+            "Critical Validation Error — codespace is still the placeholder "
+            "'FIXME'. Set the operator's NIF or IMT short name above before "
+            "exporting (PNDT will reject any submission without a registered "
+            "codespace).</div>",
+            unsafe_allow_html=True,
+        )
+        return
+
+    st.caption(
+        f"Codespace **PT:{cfg.codespace}** · Authority **{cfg.authority.name}** · "
+        f"Operator **{cfg.operator.name}**"
+    )
+
+    if st.button("Export NeTEx (PT-EPIP)", type="primary", key="btn_export_netex"):
+        with st.spinner("Translating frames, serialising XML, zipping…"):
+            result = export_netex(slug, cfg)
+
+        if not result.success:
+            for err in result.errors:
+                st.error(err)
+            return
+
+        for w in result.warnings:
+            st.warning(w)
+
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Stop places", result.stop_place_count)
+        m2.metric("Lines", result.line_count)
+        m3.metric("Service journeys", result.service_journey_count)
+
+        zip_path = Path(result.zip_path)
+        st.success(f"NeTEx export ready: `{zip_path.name}`")
+        with zip_path.open("rb") as fh:
+            st.download_button(
+                "Download NeTEx zip",
+                data=fh.read(),
+                file_name=zip_path.name,
+                mime="application/zip",
+                key="dl_netex_zip",
+            )
+
+        with st.expander("Files included", expanded=False):
+            for f in result.files_included:
+                st.markdown(f"- `{f}`")
+
+
+st.subheader("Export NeTEx (PT-EPIP)")
+st.caption(
+    "Produces a zipped multi-file NeTEx dataset conforming to the Portuguese "
+    "PT-EPIP profile, ready for submission to the PNDT."
+)
+_render_netex_export(project_slug)

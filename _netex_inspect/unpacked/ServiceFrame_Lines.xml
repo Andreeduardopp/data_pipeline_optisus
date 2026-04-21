@@ -1,0 +1,136 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<PublicationDelivery xmlns="http://www.netex.org.uk/netex" xmlns:gml="http://www.opengis.net/gml/3.2" xmlns:siri="http://www.siri.org.uk/siri" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.15:PT-EPIP-1.0" xsi:schemaLocation="http://www.netex.org.uk/netex http://netex.uk/netex/schema/1.15/xsd/NeTEx_publication.xsd">
+  <PublicationTimestamp>2026-04-21T08:55:45Z</PublicationTimestamp>
+  <ParticipantRef>PNDT_TEST</ParticipantRef>
+  <Description lang="pt">NeTEx lines for Guimabus</Description>
+  <dataObjects>
+    <CompositeFrame id="GUIMABUS:CompositeFrame:Lines" version="20260421">
+      <ValidBetween>
+        <FromDate>2026-01-01T00:00:00</FromDate>
+        <ToDate>2026-12-31T00:00:00</ToDate>
+      </ValidBetween>
+      <TypesOfFrameRef>
+        <TypeOfFrameRef ref="epip:EU_PI_LINE_OFFER" versionRef="1.0"/>
+      </TypesOfFrameRef>
+      <frames>
+        <ResourceFrame id="GUIMABUS:ResourceFrame:ResourceFrame_1" version="20260421">
+          <codespaces>
+            <Codespace id="PT:GUIMABUS:Codespace:GUIMABUS">
+              <Xmlns>GUIMABUS</Xmlns>
+              <XmlnsUrl>http://www.pndt.pt/netex/GUIMABUS</XmlnsUrl>
+              <Description>PT-EPIP codespace for Guimabus</Description>
+            </Codespace>
+          </codespaces>
+          <dataSources>
+            <DataSource id="PT:GUIMABUS:DataSource:default" version="20260421">
+              <Name lang="pt">CIM do Ave</Name>
+            </DataSource>
+          </dataSources>
+          <organisations>
+            <Authority id="PT:GUIMABUS:Authority:CIM_AVE" version="20260421">
+              <Name lang="pt">CIM do Ave</Name>
+              <ContactDetails>
+                <Email>legal@cimave.pt</Email>
+              </ContactDetails>
+            </Authority>
+            <Operator id="PT:GUIMABUS:Operator:GUIMABUS" version="20260421">
+              <Name lang="pt">Guimabus</Name>
+              <ShortName lang="pt">GUIMABUS</ShortName>
+              <ContactDetails>
+                <Email>info@guimabus.pt</Email>
+              </ContactDetails>
+            </Operator>
+          </organisations>
+          <responsibilitySets>
+            <ResponsibilitySet id="GUIMABUS:ResponsibilitySet:default" version="20260421">
+              <roles>
+                <ResponsibilityRoleAssignment id="PT:GUIMABUS:ResponsibilityRoleAssignment:ownership" version="20260421">
+                  <ResponsibleOrganisationRef ref="PT:GUIMABUS:Authority:CIM_AVE" version="any"/>
+                  <ResponsibilityRoleType>ownership</ResponsibilityRoleType>
+                </ResponsibilityRoleAssignment>
+                <ResponsibilityRoleAssignment id="PT:GUIMABUS:ResponsibilityRoleAssignment:operation" version="20260421">
+                  <ResponsibleOrganisationRef ref="PT:GUIMABUS:Operator:GUIMABUS" version="any"/>
+                  <ResponsibilityRoleType>operation</ResponsibilityRoleType>
+                </ResponsibilityRoleAssignment>
+              </roles>
+            </ResponsibilitySet>
+          </responsibilitySets>
+        </ResourceFrame>
+        <ServiceFrame id="GUIMABUS:ServiceFrame:ServiceFrame_1" version="20260421">
+          <lines>
+            <Line id="PT:GUIMABUS:Line:R1" version="20260421">
+              <Name lang="pt">Centro - Aeroporto</Name>
+              <PublicCode>1</PublicCode>
+              <TransportMode>bus</TransportMode>
+              <OperatorRef ref="PT:GUIMABUS:Operator:GUIMABUS" version="any"/>
+              <Presentation>
+                <Colour>0077BE</Colour>
+                <TextColour>FFFFFF</TextColour>
+              </Presentation>
+            </Line>
+            <Line id="PT:GUIMABUS:Line:R2" version="20260421">
+              <Name lang="pt">Noite</Name>
+              <PublicCode>N1</PublicCode>
+              <TransportMode>bus</TransportMode>
+              <OperatorRef ref="PT:GUIMABUS:Operator:GUIMABUS" version="any"/>
+            </Line>
+          </lines>
+          <scheduledStopPoints>
+            <ScheduledStopPoint id="PT:GUIMABUS:ScheduledStopPoint:QUAY_A" version="20260421">
+              <Name lang="pt">Central - Platform A</Name>
+            </ScheduledStopPoint>
+            <ScheduledStopPoint id="PT:GUIMABUS:ScheduledStopPoint:ORPHAN" version="20260421">
+              <Name lang="pt">Mercado</Name>
+            </ScheduledStopPoint>
+          </scheduledStopPoints>
+          <stopAssignments>
+            <PassengerStopAssignment id="PT:GUIMABUS:PassengerStopAssignment:QUAY_A" version="20260421" order="1">
+              <ScheduledStopPointRef ref="PT:GUIMABUS:ScheduledStopPoint:QUAY_A" version="any"/>
+              <QuayRef ref="PT:GUIMABUS:Quay:QUAY_A" version="any"/>
+            </PassengerStopAssignment>
+            <PassengerStopAssignment id="PT:GUIMABUS:PassengerStopAssignment:ORPHAN" version="20260421" order="2">
+              <ScheduledStopPointRef ref="PT:GUIMABUS:ScheduledStopPoint:ORPHAN" version="any"/>
+              <QuayRef ref="PT:GUIMABUS:Quay:ORPHAN" version="any"/>
+            </PassengerStopAssignment>
+          </stopAssignments>
+          <journeyPatterns>
+            <ServiceJourneyPattern id="PT:GUIMABUS:JourneyPattern:R1_0_1" version="20260421">
+              <Name lang="pt">R1_0_1</Name>
+              <LineRef ref="PT:GUIMABUS:Line:R1" version="any"/>
+              <DirectionType>outbound</DirectionType>
+              <pointsInSequence>
+                <StopPointInJourneyPattern id="PT:GUIMABUS:StopPointInJourneyPattern:R1_0_1_1" version="20260421" order="1">
+                  <ScheduledStopPointRef ref="PT:GUIMABUS:ScheduledStopPoint:QUAY_A" version="any"/>
+                  <ForAlighting>true</ForAlighting>
+                  <ForBoarding>true</ForBoarding>
+                </StopPointInJourneyPattern>
+                <StopPointInJourneyPattern id="PT:GUIMABUS:StopPointInJourneyPattern:R1_0_1_2" version="20260421" order="2">
+                  <ScheduledStopPointRef ref="PT:GUIMABUS:ScheduledStopPoint:ORPHAN" version="any"/>
+                  <ForAlighting>true</ForAlighting>
+                  <ForBoarding>true</ForBoarding>
+                </StopPointInJourneyPattern>
+              </pointsInSequence>
+            </ServiceJourneyPattern>
+            <ServiceJourneyPattern id="PT:GUIMABUS:JourneyPattern:R2_0_2" version="20260421">
+              <Name lang="pt">R2_0_2</Name>
+              <LineRef ref="PT:GUIMABUS:Line:R2" version="any"/>
+              <DirectionType>outbound</DirectionType>
+              <pointsInSequence>
+                <StopPointInJourneyPattern id="PT:GUIMABUS:StopPointInJourneyPattern:R2_0_2_1" version="20260421" order="1">
+                  <ScheduledStopPointRef ref="PT:GUIMABUS:ScheduledStopPoint:QUAY_A" version="any"/>
+                  <ForAlighting>true</ForAlighting>
+                  <ForBoarding>true</ForBoarding>
+                </StopPointInJourneyPattern>
+                <StopPointInJourneyPattern id="PT:GUIMABUS:StopPointInJourneyPattern:R2_0_2_2" version="20260421" order="2">
+                  <ScheduledStopPointRef ref="PT:GUIMABUS:ScheduledStopPoint:ORPHAN" version="any"/>
+                  <ForAlighting>true</ForAlighting>
+                  <ForBoarding>true</ForBoarding>
+                </StopPointInJourneyPattern>
+              </pointsInSequence>
+            </ServiceJourneyPattern>
+          </journeyPatterns>
+        </ServiceFrame>
+      </frames>
+    </CompositeFrame>
+  </dataObjects>
+</PublicationDelivery>

@@ -397,18 +397,17 @@ def database_exists(project_slug: str) -> bool:
 # CRUD operations
 # ═══════════════════════════════════════════════════════════════════════════
 
-def upsert_records(
-    project_slug: str,
+def upsert_records_on_conn(
+    conn: sqlite3.Connection,
     table_name: str,
     records: List[Dict[str, Any]],
 ) -> InsertResult:
-    """Validate and insert/update records into a GTFS table.
+    """Validate + upsert records on an open connection.
 
-    Each record dict is validated against the corresponding Pydantic model
-    before being written.  Records that fail validation are counted as
-    *failed* and their error messages are collected.
-
-    Returns an ``InsertResult`` with counts.
+    Does **not** commit, close, or update ``_gtfs_meta``.  Use this when
+    you want to batch multiple upserts inside a single transaction
+    (e.g. the batch-import flow).  For a one-shot upsert with its own
+    transaction, use :func:`upsert_records`.
     """
     if table_name not in GTFS_TABLE_MODELS:
         return InsertResult(
@@ -427,12 +426,10 @@ def upsert_records(
     result = InsertResult()
     valid_rows: List[Dict[str, Any]] = []
 
-    # 1. Validate every record
     for i, raw in enumerate(records):
         try:
             obj = model_cls(**raw)
             row_dict = obj.model_dump()
-            # Only include columns that belong to this table
             valid_rows.append({c: row_dict.get(c) for c in columns})
         except (ValidationError, Exception) as exc:
             result.failed += 1
@@ -441,20 +438,37 @@ def upsert_records(
     if not valid_rows:
         return result
 
-    # 2. Bulk upsert
     placeholders = ", ".join(["?"] * len(columns))
     col_list = ", ".join(columns)
     sql = f"INSERT OR REPLACE INTO {table_name} ({col_list}) VALUES ({placeholders})"
 
+    for row in valid_rows:
+        try:
+            conn.execute(sql, [row.get(c) for c in columns])
+            result.inserted += 1
+        except sqlite3.IntegrityError as exc:
+            result.failed += 1
+            result.errors.append(str(exc))
+
+    return result
+
+
+def upsert_records(
+    project_slug: str,
+    table_name: str,
+    records: List[Dict[str, Any]],
+) -> InsertResult:
+    """Validate and insert/update records into a GTFS table.
+
+    Each record dict is validated against the corresponding Pydantic model
+    before being written.  Records that fail validation are counted as
+    *failed* and their error messages are collected.
+
+    Returns an ``InsertResult`` with counts.
+    """
     conn = get_connection(project_slug)
     try:
-        for row in valid_rows:
-            try:
-                conn.execute(sql, [row.get(c) for c in columns])
-                result.inserted += 1
-            except sqlite3.IntegrityError as exc:
-                result.failed += 1
-                result.errors.append(str(exc))
+        result = upsert_records_on_conn(conn, table_name, records)
         conn.execute(
             "INSERT OR REPLACE INTO _gtfs_meta (key, value) VALUES (?, ?)",
             ("last_modified", datetime.now(timezone.utc).isoformat()),
@@ -462,7 +476,6 @@ def upsert_records(
         conn.commit()
     finally:
         conn.close()
-
     return result
 
 
